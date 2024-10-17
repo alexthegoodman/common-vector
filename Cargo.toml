@@ -8,3 +8,6 @@ bytemuck = "1.19.0"
 wgpu = "22.1.0"
 pollster = "0.3.0"
 floem = { git = "https://github.com/lapce/floem.git" }
+winit = "0.29"
+futures = "0.3.30"
+uuid = { version = "1.8.0", features = ["v4"] }

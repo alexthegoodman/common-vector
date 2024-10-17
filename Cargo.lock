@@ -422,8 +422,11 @@ version = "0.1.0"
 dependencies = [
  "bytemuck",
  "floem",
+ "futures",
  "pollster",
+ "uuid",
  "wgpu",
+ "winit",
 ]
 
 [[package]]
@@ -867,7 +870,7 @@ dependencies = [
  "taffy",
  "unicode-segmentation",
  "wasm-bindgen-futures",
- "web-time",
+ "web-time 1.1.0",
  "wgpu",
 ]
 
@@ -926,7 +929,7 @@ dependencies = [
  "raw-window-handle 0.6.2",
  "redox_syscall 0.3.5",
  "rustix",
- "sctk-adwaita",
+ "sctk-adwaita 0.7.0",
  "smithay-client-toolkit 0.18.1",
  "smol_str",
  "unicode-segmentation",
@@ -937,7 +940,7 @@ dependencies = [
  "wayland-protocols 0.31.2",
  "wayland-protocols-plasma",
  "web-sys",
- "web-time",
+ "web-time 1.1.0",
  "windows-sys 0.48.0",
  "x11-dl",
  "x11rb",
@@ -2287,6 +2290,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "sctk-adwaita"
+version = "0.8.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "70b31447ca297092c5a9916fc3b955203157b37c19ca8edde4f52e9843e602c7"
+dependencies = [
+ "ab_glyph",
+ "log",
+ "memmap2",
+ "smithay-client-toolkit 0.18.1",
+ "tiny-skia",
+]
+
+[[package]]
 name = "self_cell"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2862,6 +2878,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "uuid"
+version = "1.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f8c5f0a0af699448548ad1a2fbf920fb4bee257eae39953ba95cb84891a0446a"
+dependencies = [
+ "getrandom",
+]
+
+[[package]]
 name = "version_check"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3089,6 +3114,16 @@ name = "web-sys"
 version = "0.3.72"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f6488b90108c040df0fe62fa815cbdee25124641df01814dd7282749234c6112"
+dependencies = [
+ "js-sys",
+ "wasm-bindgen",
+]
+
+[[package]]
+name = "web-time"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aa30049b1c872b72c89866d458eae9f20380ab280ffd1b1e18df2d3e2d98cfe0"
 dependencies = [
  "js-sys",
  "wasm-bindgen",
@@ -3485,6 +3520,54 @@ name = "windows_x86_64_msvc"
 version = "0.52.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "589f6da84c646204747d1270a2a5661ea66ed1cced2631d546fdfb155959f9ec"
+
+[[package]]
+name = "winit"
+version = "0.29.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0d59ad965a635657faf09c8f062badd885748428933dad8e8bdd64064d92e5ca"
+dependencies = [
+ "ahash",
+ "android-activity",
+ "atomic-waker",
+ "bitflags 2.6.0",
+ "bytemuck",
+ "calloop 0.12.4",
+ "cfg_aliases 0.1.1",
+ "core-foundation 0.9.4",
+ "core-graphics 0.23.2",
+ "cursor-icon",
+ "icrate",
+ "js-sys",
+ "libc",
+ "log",
+ "memmap2",
+ "ndk",
+ "ndk-sys",
+ "objc2 0.4.1",
+ "once_cell",
+ "orbclient",
+ "percent-encoding",
+ "raw-window-handle 0.6.2",
+ "redox_syscall 0.3.5",
+ "rustix",
+ "sctk-adwaita 0.8.3",
+ "smithay-client-toolkit 0.18.1",
+ "smol_str",
+ "unicode-segmentation",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "wayland-backend",
+ "wayland-client",
+ "wayland-protocols 0.31.2",
+ "wayland-protocols-plasma",
+ "web-sys",
+ "web-time 0.2.4",
+ "windows-sys 0.48.0",
+ "x11-dl",
+ "x11rb",
+ "xkbcommon-dl",
+]
 
 [[package]]
 name = "winnow"
