@@ -18,7 +18,7 @@ use winit::{event_loop, window};
 
 // Basic 2D point structure
 #[derive(Clone, Copy)]
-struct Point {
+pub struct Point {
     x: f32,
     y: f32,
 }
@@ -27,13 +27,6 @@ struct Point {
 trait Shape {
     fn bounding_box(&self) -> BoundingBox;
     fn contains_point(&self, point: &Point) -> bool;
-    // fn draw(
-    //     &self,
-    //     renderer: &mut CmnRenderer,
-    //     surface: &wgpu::Surface<'_>,
-    //     viewport: &Viewport,
-    //     device: &wgpu::Device,
-    // );
 }
 
 impl Shape for Path {
@@ -76,24 +69,6 @@ impl Shape for Path {
         // For now, we'll return a placeholder value
         false
     }
-
-    // fn draw(&self, renderer: &mut CmnRenderer, surface: &wgpu::Surface<'_>) {
-    //     // Implement path drawing logic
-    //     // This will involve converting the path to triangles and rendering them
-    //     let vertices = self.to_vertices();
-    //     renderer.draw_vertices(surface, &vertices);
-    // }
-
-    // fn draw(
-    //     &self,
-    //     renderer: &mut CmnRenderer,
-    //     surface: &wgpu::Surface<'_>,
-    //     viewport: &Viewport,
-    //     device: &wgpu::Device,
-    // ) {
-    //     let (vertices, indices) = self.to_vertices_and_indices(viewport, device);
-    //     renderer.draw_indexed(surface, &vertices, &indices);
-    // }
 }
 
 impl Shape for Polygon {
@@ -133,24 +108,6 @@ impl Shape for Polygon {
         }
         inside
     }
-
-    // fn draw(&self, renderer: &mut CmnRenderer, surface: &wgpu::Surface<'_>) {
-    //     // Implement polygon drawing logic
-    //     // This will involve triangulating the polygon and rendering the resulting triangles
-    //     let vertices = self.to_vertices();
-    //     renderer.draw_vertices(surface, &vertices);
-    // }
-
-    // fn draw(
-    //     &self,
-    //     renderer: &mut CmnRenderer,
-    //     surface: &wgpu::Surface<'_>,
-    //     viewport: &Viewport,
-    //     device: &wgpu::Device,
-    // ) {
-    //     let (vertices, indices) = self.to_vertices_and_indices(viewport, device);
-    //     renderer.draw_indexed(surface, &vertices, &indices);
-    // }
 }
 
 // First, let's create a wrapper struct for our Point that we can use as a key in our HashMap
@@ -170,151 +127,6 @@ impl From<Point> for PointKey {
         }
     }
 }
-
-// impl Path {
-//     fn to_vertices_and_indices(&self) -> (Vec<Vertex>, Vec<u32>) {
-//         let mut vertices = Vec::new();
-//         let mut indices = Vec::new();
-//         let mut vertex_map = HashMap::new();
-//         let mut current_point = Point { x: 0.0, y: 0.0 };
-//         let mut index = 0;
-
-//         for command in &self.commands {
-//             match command {
-//                 PathCommand::MoveTo(point) => {
-//                     current_point = *point;
-//                 }
-//                 PathCommand::LineTo(point) => {
-//                     let start_index = *vertex_map
-//                         .entry(PointKey::from(current_point))
-//                         .or_insert_with(|| {
-//                             let idx = index;
-//                             vertices.push(Vertex {
-//                                 position: [current_point.x, current_point.y, 0.0],
-//                                 tex_coords: [0.0, 0.0],
-//                                 color: wgpu::Color::WHITE,
-//                             });
-//                             index += 1;
-//                             idx
-//                         });
-
-//                     let end_index =
-//                         *vertex_map.entry(PointKey::from(*point)).or_insert_with(|| {
-//                             let idx = index;
-//                             vertices.push(Vertex {
-//                                 position: [point.x, point.y, 0.0],
-//                                 tex_coords: [0.0, 0.0],
-//                                 color: wgpu::Color::WHITE,
-//                             });
-//                             index += 1;
-//                             idx
-//                         });
-
-//                     indices.push(start_index as u32);
-//                     indices.push(end_index as u32);
-//                     current_point = *point;
-//                 }
-//                 PathCommand::QuadraticCurveTo(control, end) => {
-//                     // Approximate quadratic curve with line segments
-//                     let steps = 10; // Adjust for desired smoothness
-//                     for i in 1..=steps {
-//                         let t = i as f32 / steps as f32;
-//                         let x = (1.0 - t).powi(2) * current_point.x
-//                             + 2.0 * (1.0 - t) * t * control.x
-//                             + t.powi(2) * end.x;
-//                         let y = (1.0 - t).powi(2) * current_point.y
-//                             + 2.0 * (1.0 - t) * t * control.y
-//                             + t.powi(2) * end.y;
-//                         let point = Point { x, y };
-
-//                         let point_index =
-//                             *vertex_map.entry(PointKey::from(point)).or_insert_with(|| {
-//                                 let idx = index;
-//                                 vertices.push(Vertex {
-//                                     position: [x, y, 0.0],
-//                                     tex_coords: [0.0, 0.0],
-//                                     color: wgpu::Color::WHITE,
-//                                 });
-//                                 index += 1;
-//                                 idx
-//                             });
-
-//                         indices.push(point_index as u32);
-//                     }
-//                     current_point = *end;
-//                 }
-//                 PathCommand::CubicCurveTo(control1, control2, end) => {
-//                     // Approximate cubic curve with line segments
-//                     let steps = 20; // Adjust for desired smoothness
-//                     for i in 1..=steps {
-//                         let t = i as f32 / steps as f32;
-//                         let x = (1.0 - t).powi(3) * current_point.x
-//                             + 3.0 * (1.0 - t).powi(2) * t * control1.x
-//                             + 3.0 * (1.0 - t) * t.powi(2) * control2.x
-//                             + t.powi(3) * end.x;
-//                         let y = (1.0 - t).powi(3) * current_point.y
-//                             + 3.0 * (1.0 - t).powi(2) * t * control1.y
-//                             + 3.0 * (1.0 - t) * t.powi(2) * control2.y
-//                             + t.powi(3) * end.y;
-//                         let point = Point { x, y };
-
-//                         let point_index =
-//                             *vertex_map.entry(PointKey::from(point)).or_insert_with(|| {
-//                                 let idx = index;
-//                                 vertices.push(Vertex {
-//                                     position: [x, y, 0.0],
-//                                     tex_coords: [0.0, 0.0],
-//                                     color: wgpu::Color::WHITE,
-//                                 });
-//                                 index += 1;
-//                                 idx
-//                             });
-
-//                         indices.push(point_index as u32);
-//                     }
-//                     current_point = *end;
-//                 }
-//                 PathCommand::ClosePath => {
-//                     // Add a line to the first point of the path
-//                     if let Some(&first_index) = indices.first() {
-//                         indices.push(first_index);
-//                     }
-//                 }
-//             }
-//         }
-
-//         (vertices, indices)
-//     }
-// }
-
-// impl Polygon {
-//     fn to_vertices_and_indices(&self) -> (Vec<Vertex>, Vec<u32>) {
-//         let mut vertices = Vec::new();
-//         let mut indices = Vec::new();
-
-//         // Create vertices
-//         for point in &self.points {
-//             vertices.push(Vertex {
-//                 position: [point.x, point.y, 0.0],
-//                 tex_coords: [0.0, 0.0],
-//                 color: wgpu::Color::WHITE,
-//             });
-//         }
-
-//         // Triangulate the polygon using a simple fan triangulation
-//         // Note: This method works correctly only for convex polygons
-//         // For complex polygons, we'd need a more robust triangulation algorithm
-//         if self.points.len() >= 3 {
-//             for i in 1..self.points.len() - 1 {
-//                 indices.push(0);
-//                 indices.push(i as u32);
-//                 indices.push((i + 1) as u32);
-//             }
-//         }
-
-//         (vertices, indices)
-//     }
-// }
 
 impl Vertex {
     fn new(x: f32, y: f32, color: [f32; 4]) -> Self {
@@ -355,39 +167,58 @@ struct EdgePoint {
     edge_index: usize,
 }
 
+pub fn get_polygon_data(
+    window_size: &WindowSize,
+    device: &wgpu::Device,
+    points: Vec<Point>,
+) -> (
+    Vec<Vertex>,
+    Vec<u32>,
+    wgpu::Buffer,
+    wgpu::Buffer,
+    Vec<Point>,
+) {
+    let mut vertices = Vec::new();
+    let mut indices = Vec::new();
+
+    // Create vertices
+    for point in &points {
+        let (x, y) = size_to_ndc(window_size, point.x, point.y);
+        vertices.push(Vertex::new(x, y, [1.0, 1.0, 1.0, 1.0])); // white color
+    }
+
+    // Triangulate the polygon (assuming it's convex)
+    if points.len() >= 3 {
+        for i in 1..points.len() - 1 {
+            indices.push(0);
+            indices.push(i as u32);
+            indices.push((i + 1) as u32);
+        }
+    }
+
+    // Create a buffer for the vertices
+    let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("Vertex Buffer"),
+        contents: bytemuck::cast_slice(&vertices),
+        usage: wgpu::BufferUsages::VERTEX,
+    });
+
+    // Create a buffer for the indices
+    let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("Index Buffer"),
+        contents: bytemuck::cast_slice(&indices),
+        usage: wgpu::BufferUsages::INDEX,
+    });
+
+    println!("poly indices {:?}", indices);
+
+    (vertices, indices, vertex_buffer, index_buffer, points)
+}
+
 impl Polygon {
     fn new(window_size: &WindowSize, device: &wgpu::Device, points: Vec<Point>) -> Self {
-        let mut vertices = Vec::new();
-        let mut indices = Vec::new();
-
-        // Create vertices
-        for point in &points {
-            let (x, y) = size_to_ndc(window_size, point.x, point.y);
-            vertices.push(Vertex::new(x, y, [1.0, 1.0, 1.0, 1.0])); // white color
-        }
-
-        // Triangulate the polygon (assuming it's convex)
-        if points.len() >= 3 {
-            for i in 1..points.len() - 1 {
-                indices.push(0);
-                indices.push(i as u32);
-                indices.push((i + 1) as u32);
-            }
-        }
-
-        // Create a buffer for the vertices
-        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Vertex Buffer"),
-            contents: bytemuck::cast_slice(&vertices),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
-
-        // Create a buffer for the indices
-        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Index Buffer"),
-            contents: bytemuck::cast_slice(&indices),
-            usage: wgpu::BufferUsages::INDEX,
-        });
+        let (vertices, indices, vertex_buffer, index_buffer, points) =
+            get_polygon_data(window_size, device, points);
 
         Polygon {
             points,
@@ -396,6 +227,17 @@ impl Polygon {
             vertex_buffer,
             index_buffer,
         }
+    }
+
+    fn update_data(&mut self, window_size: &WindowSize, device: &wgpu::Device, points: Vec<Point>) {
+        let (vertices, indices, vertex_buffer, index_buffer, points) =
+            get_polygon_data(window_size, device, points);
+
+        self.points = points;
+        self.vertices = vertices;
+        self.indices = indices;
+        self.vertex_buffer = vertex_buffer;
+        self.index_buffer = index_buffer;
     }
 
     fn closest_point_on_edge(&self, mouse_pos: Point) -> Option<EdgePoint> {
@@ -426,8 +268,16 @@ impl Polygon {
         }
     }
 
-    fn add_point(&mut self, new_point: Point, edge_index: usize) {
+    fn add_point(
+        &mut self,
+        new_point: Point,
+        edge_index: usize,
+        window_size: &WindowSize,
+        device: &wgpu::Device,
+    ) {
+        println!("Add point");
         self.points.insert(edge_index + 1, new_point);
+        self.update_data(window_size, device, self.points.clone());
     }
 
     fn move_point(&mut self, point_index: usize, new_position: Point) {
@@ -454,12 +304,20 @@ impl Editor {
         }
     }
 
-    fn handle_mouse_move(&mut self, x: f32, y: f32) {
+    fn handle_mouse_move(
+        &mut self,
+        window_size: &WindowSize,
+        device: &wgpu::Device,
+        x: f32,
+        y: f32,
+    ) {
         let mouse_pos = Point { x, y };
         self.hover_point = None;
 
         if let Some((poly_index, point_index)) = self.dragging_point {
             self.polygons[poly_index].move_point(point_index, mouse_pos);
+            let points = self.polygons[poly_index].points.clone();
+            self.polygons[poly_index].update_data(window_size, device, points);
         } else {
             for polygon in &self.polygons {
                 if let Some(edge_point) = polygon.closest_point_on_edge(mouse_pos) {
@@ -470,7 +328,13 @@ impl Editor {
         }
     }
 
-    fn handle_mouse_down(&mut self, x: f32, y: f32) {
+    fn handle_mouse_down(
+        &mut self,
+        x: f32,
+        y: f32,
+        window_size: &WindowSize,
+        device: &wgpu::Device,
+    ) {
         let mouse_pos = Point { x, y };
 
         if let Some(hover_point) = self.hover_point {
@@ -479,17 +343,25 @@ impl Editor {
                     if (edge_point.point.x - hover_point.point.x).abs() < 1.0
                         && (edge_point.point.y - hover_point.point.y).abs() < 1.0
                     {
-                        polygon.add_point(edge_point.point, edge_point.edge_index);
+                        polygon.add_point(
+                            edge_point.point,
+                            edge_point.edge_index,
+                            window_size,
+                            device,
+                        );
                         self.dragging_point = Some((poly_index, edge_point.edge_index + 1));
                         break;
                     }
                 }
             }
         } else {
-            for (poly_index, polygon) in self.polygons.iter().enumerate() {
+            for (poly_index, polygon) in self.polygons.iter_mut().enumerate() {
                 for (point_index, point) in polygon.points.iter().enumerate() {
                     if distance(*point, mouse_pos) < 5.0 {
                         self.dragging_point = Some((poly_index, point_index));
+                        // update data while dragging
+                        // TODO: update polygon.points[i] with latest position
+                        polygon.update_data(window_size, device, polygon.points.clone());
                         return;
                     }
                 }
@@ -579,152 +451,168 @@ fn draw_dot(
     (vertices, indices, vertex_buffer, index_buffer)
 }
 
-impl Path {
-    fn new(window_size: &WindowSize, device: &wgpu::Device, commands: Vec<PathCommand>) -> Self {
-        let mut vertices = Vec::new();
-        let mut indices = Vec::new();
-        let mut vertex_map = HashMap::new();
-        let mut current_point = Point { x: 0.0, y: 0.0 };
-        let mut index = 0;
+pub fn get_path_data(
+    window_size: &WindowSize,
+    device: &wgpu::Device,
+    commands: Vec<PathCommand>,
+) -> (
+    Vec<Vertex>,
+    Vec<u32>,
+    wgpu::Buffer,
+    wgpu::Buffer,
+    Vec<PathCommand>,
+) {
+    let mut vertices = Vec::new();
+    let mut indices = Vec::new();
+    let mut vertex_map = HashMap::new();
+    let mut current_point = Point { x: 0.0, y: 0.0 };
+    let mut index = 0;
 
-        for command in &commands {
-            match command {
-                PathCommand::MoveTo(point) => {
-                    current_point = *point;
-                }
-                PathCommand::LineTo(point) => {
-                    let start_index = *vertex_map
-                        .entry(PointKey::from(current_point))
-                        .or_insert_with(|| {
-                            let (x, y) = size_to_ndc(window_size, current_point.x, current_point.y);
+    for command in &commands {
+        match command {
+            PathCommand::MoveTo(point) => {
+                current_point = *point;
+            }
+            PathCommand::LineTo(point) => {
+                let start_index = *vertex_map
+                    .entry(PointKey::from(current_point))
+                    .or_insert_with(|| {
+                        let (x, y) = size_to_ndc(window_size, current_point.x, current_point.y);
+                        let idx = index;
+                        vertices.push(Vertex::new(x, y, [1.0, 1.0, 1.0, 1.0])); // White color
+                        index += 1;
+                        idx
+                    });
+
+                let end_index = *vertex_map.entry(PointKey::from(*point)).or_insert_with(|| {
+                    let (x, y) = size_to_ndc(window_size, point.x, point.y);
+                    let idx = index;
+                    vertices.push(Vertex::new(x, y, [1.0, 1.0, 1.0, 1.0])); // White color
+                    index += 1;
+                    idx
+                });
+
+                indices.push(start_index as u32);
+                indices.push(end_index as u32);
+                current_point = *point;
+            }
+            // TODO: do to_ndc convertion on the rest of these...
+            PathCommand::QuadraticCurveTo(control, end) => {
+                // Approximate quadratic curve with line segments
+                let steps = 10; // Adjust for desired smoothness
+                for i in 1..=steps {
+                    let t = i as f32 / steps as f32;
+                    let x = (1.0 - t).powi(2) * current_point.x
+                        + 2.0 * (1.0 - t) * t * control.x
+                        + t.powi(2) * end.x;
+                    let y = (1.0 - t).powi(2) * current_point.y
+                        + 2.0 * (1.0 - t) * t * control.y
+                        + t.powi(2) * end.y;
+                    let point = Point { x, y };
+
+                    let point_index =
+                        *vertex_map.entry(PointKey::from(point)).or_insert_with(|| {
                             let idx = index;
-                            vertices.push(Vertex::new(x, y, [1.0, 1.0, 1.0, 1.0])); // White color
+                            vertices.push(Vertex {
+                                position: [x, y, 0.0],
+                                tex_coords: [0.0, 0.0],
+                                color: [1.0, 1.0, 1.0, 1.0],
+                            });
                             index += 1;
                             idx
                         });
 
-                    let end_index =
-                        *vertex_map.entry(PointKey::from(*point)).or_insert_with(|| {
-                            let (x, y) = size_to_ndc(window_size, point.x, point.y);
+                    indices.push(point_index as u32);
+                }
+                current_point = *end;
+            }
+            PathCommand::CubicCurveTo(control1, control2, end) => {
+                // Approximate cubic curve with line segments
+                let steps = 20; // Adjust for desired smoothness
+                for i in 1..=steps {
+                    let t = i as f32 / steps as f32;
+                    let x = (1.0 - t).powi(3) * current_point.x
+                        + 3.0 * (1.0 - t).powi(2) * t * control1.x
+                        + 3.0 * (1.0 - t) * t.powi(2) * control2.x
+                        + t.powi(3) * end.x;
+                    let y = (1.0 - t).powi(3) * current_point.y
+                        + 3.0 * (1.0 - t).powi(2) * t * control1.y
+                        + 3.0 * (1.0 - t) * t.powi(2) * control2.y
+                        + t.powi(3) * end.y;
+                    let point = Point { x, y };
+
+                    let point_index =
+                        *vertex_map.entry(PointKey::from(point)).or_insert_with(|| {
                             let idx = index;
-                            vertices.push(Vertex::new(x, y, [1.0, 1.0, 1.0, 1.0])); // White color
+                            vertices.push(Vertex {
+                                position: [x, y, 0.0],
+                                tex_coords: [0.0, 0.0],
+                                color: [1.0, 1.0, 1.0, 1.0], //white
+                            });
                             index += 1;
                             idx
                         });
 
-                    indices.push(start_index as u32);
-                    indices.push(end_index as u32);
-                    current_point = *point;
+                    indices.push(point_index as u32);
                 }
-                // TODO: do to_ndc convertion on the rest of these...
-                PathCommand::QuadraticCurveTo(control, end) => {
-                    // Approximate quadratic curve with line segments
-                    let steps = 10; // Adjust for desired smoothness
-                    for i in 1..=steps {
-                        let t = i as f32 / steps as f32;
-                        let x = (1.0 - t).powi(2) * current_point.x
-                            + 2.0 * (1.0 - t) * t * control.x
-                            + t.powi(2) * end.x;
-                        let y = (1.0 - t).powi(2) * current_point.y
-                            + 2.0 * (1.0 - t) * t * control.y
-                            + t.powi(2) * end.y;
-                        let point = Point { x, y };
-
-                        let point_index =
-                            *vertex_map.entry(PointKey::from(point)).or_insert_with(|| {
-                                let idx = index;
-                                vertices.push(Vertex {
-                                    position: [x, y, 0.0],
-                                    tex_coords: [0.0, 0.0],
-                                    color: [1.0, 1.0, 1.0, 1.0],
-                                });
-                                index += 1;
-                                idx
-                            });
-
-                        indices.push(point_index as u32);
-                    }
-                    current_point = *end;
-                }
-                PathCommand::CubicCurveTo(control1, control2, end) => {
-                    // Approximate cubic curve with line segments
-                    let steps = 20; // Adjust for desired smoothness
-                    for i in 1..=steps {
-                        let t = i as f32 / steps as f32;
-                        let x = (1.0 - t).powi(3) * current_point.x
-                            + 3.0 * (1.0 - t).powi(2) * t * control1.x
-                            + 3.0 * (1.0 - t) * t.powi(2) * control2.x
-                            + t.powi(3) * end.x;
-                        let y = (1.0 - t).powi(3) * current_point.y
-                            + 3.0 * (1.0 - t).powi(2) * t * control1.y
-                            + 3.0 * (1.0 - t) * t.powi(2) * control2.y
-                            + t.powi(3) * end.y;
-                        let point = Point { x, y };
-
-                        let point_index =
-                            *vertex_map.entry(PointKey::from(point)).or_insert_with(|| {
-                                let idx = index;
-                                vertices.push(Vertex {
-                                    position: [x, y, 0.0],
-                                    tex_coords: [0.0, 0.0],
-                                    color: [1.0, 1.0, 1.0, 1.0], //white
-                                });
-                                index += 1;
-                                idx
-                            });
-
-                        indices.push(point_index as u32);
-                    }
-                    current_point = *end;
-                }
-                PathCommand::ClosePath => {
-                    // Add a line to the first point of the path
-                    if let Some(&first_index) = indices.first() {
-                        indices.push(first_index);
-                    }
+                current_point = *end;
+            }
+            PathCommand::ClosePath => {
+                // Add a line to the first point of the path
+                if let Some(&first_index) = indices.first() {
+                    indices.push(first_index);
                 }
             }
         }
+    }
 
-        // let indices: [u32; 6] = [0, 1, 2, 2, 3, 0]; // square
+    // let indices: [u32; 6] = [0, 1, 2, 2, 3, 0]; // square
 
-        // TODO: may want to create per shape
-        // let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-        //     layout: &renderer_state.bind_group_layout,
-        //     entries: &[
-        //         wgpu::BindGroupEntry {
-        //             binding: 0,
-        //             resource: wgpu::BindingResource::TextureView(&renderer_state.texture_view),
-        //         },
-        //         wgpu::BindGroupEntry {
-        //             binding: 1,
-        //             resource: wgpu::BindingResource::Sampler(&renderer_state.sampler),
-        //         },
-        //         wgpu::BindGroupEntry {
-        //             binding: 2,
-        //             resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-        //                 buffer: &renderer_state.render_mode_buffer,
-        //                 offset: 0,
-        //                 size: None,
-        //             }),
-        //         },
-        //     ],
-        //     label: Some("Primary Atlas Texture Bind Group {config.button_id}"),
-        // });
+    // TODO: may want to create per shape
+    // let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+    //     layout: &renderer_state.bind_group_layout,
+    //     entries: &[
+    //         wgpu::BindGroupEntry {
+    //             binding: 0,
+    //             resource: wgpu::BindingResource::TextureView(&renderer_state.texture_view),
+    //         },
+    //         wgpu::BindGroupEntry {
+    //             binding: 1,
+    //             resource: wgpu::BindingResource::Sampler(&renderer_state.sampler),
+    //         },
+    //         wgpu::BindGroupEntry {
+    //             binding: 2,
+    //             resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+    //                 buffer: &renderer_state.render_mode_buffer,
+    //                 offset: 0,
+    //                 size: None,
+    //             }),
+    //         },
+    //     ],
+    //     label: Some("Primary Atlas Texture Bind Group {config.button_id}"),
+    // });
 
-        // Create a buffer for the vertices
-        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Vertex Buffer"),
-            contents: bytemuck::cast_slice(&vertices),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
+    // Create a buffer for the vertices
+    let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("Vertex Buffer"),
+        contents: bytemuck::cast_slice(&vertices),
+        usage: wgpu::BufferUsages::VERTEX,
+    });
 
-        // Create a buffer for the indices
-        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Index Buffer"),
-            contents: bytemuck::cast_slice(&indices),
-            usage: wgpu::BufferUsages::INDEX,
-        });
+    // Create a buffer for the indices
+    let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("Index Buffer"),
+        contents: bytemuck::cast_slice(&indices),
+        usage: wgpu::BufferUsages::INDEX,
+    });
+
+    (vertices, indices, vertex_buffer, index_buffer, commands)
+}
+
+impl Path {
+    fn new(window_size: &WindowSize, device: &wgpu::Device, commands: Vec<PathCommand>) -> Self {
+        let (vertices, indices, index_buffer, vertex_buffer, commands) =
+            get_path_data(window_size, device, commands);
 
         Path {
             commands,
@@ -764,7 +652,7 @@ struct Path {
     index_buffer: wgpu::Buffer,
 }
 
-enum PathCommand {
+pub enum PathCommand {
     MoveTo(Point),
     LineTo(Point),
     QuadraticCurveTo(Point, Point),
@@ -1043,7 +931,7 @@ pub async fn initialize_core(event_loop: EventLoop<()>, window: Window, window_s
             Point { x: 100.0, y: 100.0 },
             Point { x: 200.0, y: 100.0 },
             Point { x: 200.0, y: 200.0 },
-            Point { x: 100.0, y: 200.0 },
+            // Point { x: 100.0, y: 200.0 },
         ],
     ));
 
@@ -1061,19 +949,29 @@ pub async fn initialize_core(event_loop: EventLoop<()>, window: Window, window_s
                         // Update the mouse position
                         // println!("Mouse Position: {:?}", position);
                         mouse_position = (position.x as f32, position.y as f32);
-                        editor.handle_mouse_move(position.x as f32, position.y as f32);
+                        editor.handle_mouse_move(
+                            &window_size,
+                            &device,
+                            position.x as f32,
+                            position.y as f32,
+                        );
+                        // window.request_redraw();
                     }
                     WindowEvent::MouseInput { state, button, .. } => {
                         // let window_size = (size.width as f64, size.height as f64);
                         // handle_click(window_size, mouse_position, &buttons, &labels);
                         if button == MouseButton::Left {
                             match state {
-                                ElementState::Pressed => {
-                                    editor.handle_mouse_down(mouse_position.0, mouse_position.1)
-                                }
+                                ElementState::Pressed => editor.handle_mouse_down(
+                                    mouse_position.0,
+                                    mouse_position.1,
+                                    &window_size,
+                                    &device,
+                                ),
                                 ElementState::Released => editor.handle_mouse_up(),
                             }
                         }
+                        // window.request_redraw();
                     }
                     WindowEvent::Resized(new_size) => {
                         editor.viewport =
@@ -1093,7 +991,7 @@ pub async fn initialize_core(event_loop: EventLoop<()>, window: Window, window_s
                     //     }
                     // }
                     WindowEvent::RedrawRequested => {
-                        println!("Redraw");
+                        // println!("Redraw");
                         // editor.draw(&mut renderer, &surface, &device);
 
                         let frame = surface
@@ -1145,11 +1043,12 @@ pub async fn initialize_core(event_loop: EventLoop<()>, window: Window, window_s
                                     occlusion_query_set: None,
                                 });
 
-                            println!("Render frame...");
+                            // println!("Render frame...");
 
                             render_pass.set_pipeline(&render_pipeline);
 
                             for (poly_index, polygon) in editor.polygons.iter().enumerate() {
+                                // println!("Indices length {:?}", polygon.indices.len());
                                 render_pass.set_vertex_buffer(0, polygon.vertex_buffer.slice(..));
                                 render_pass.set_index_buffer(
                                     polygon.index_buffer.slice(..),
@@ -1179,6 +1078,7 @@ pub async fn initialize_core(event_loop: EventLoop<()>, window: Window, window_s
                         frame.present();
 
                         // supposed to fall in line with OS refresh rate (?)
+                        // std::thread::sleep(std::time::Duration::from_millis(2000));
                         window.request_redraw();
                     }
                     WindowEvent::CloseRequested => target.exit(),
@@ -1189,239 +1089,8 @@ pub async fn initialize_core(event_loop: EventLoop<()>, window: Window, window_s
         .unwrap();
 }
 
-// #[derive(Default)]
-// struct CmnRenderer {
-//     id: String,
-// }
-
-// impl CmnRenderer {
-//     fn new() -> Self {
-//         CmnRenderer {
-//             id: Uuid::new_v4().to_string(),
-//         }
-//     }
-
-//     fn draw_indexed(&mut self, surface: &wgpu::Surface<'_>, vertices: &[Vertex], indices: &[u32]) {
-//         // let renderer_state = self.state.as_mut().expect("Couldn't get RendererState");
-
-//     }
-// }
-
-// #[derive(Default)]
-// struct App {
-//     window: Option<Window>,
-//     // surface: Option<wgpu::Surface>,
-//     renderer: CmnRenderer,
-//     instance: wgpu::Instance,
-// }
-
-// impl Default for App {
-//     fn default() -> Self {
-//         let dx12_compiler = wgpu::Dx12Compiler::Dxc {
-//             dxil_path: None,
-//             dxc_path: None,
-//         };
-
-//         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-//             backends: wgpu::Backends::PRIMARY,
-//             dx12_shader_compiler: dx12_compiler,
-//             flags: wgpu::InstanceFlags::empty(),
-//             gles_minor_version: wgpu::Gles3MinorVersion::Version2,
-//         });
-
-//         Self {
-//             window: None,
-//             // surface: None,
-//             renderer: CmnRenderer::new(),
-//             instance,
-//             // ... initialize other fields ...
-//         }
-//     }
-// }
-
-// impl App {
-//     fn start(
-//         &mut self,
-//         event_loop: &ActiveEventLoop,
-//         window_size: WindowSize,
-//         window_size_winit: PhysicalSize<u32>,
-//     ) {
-//         let dx12_compiler = wgpu::Dx12Compiler::Dxc {
-//             dxil_path: None,
-//             dxc_path: None,
-//         };
-
-//         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-//             backends: wgpu::Backends::PRIMARY,
-//             dx12_shader_compiler: dx12_compiler,
-//             flags: wgpu::InstanceFlags::empty(),
-//             gles_minor_version: wgpu::Gles3MinorVersion::Version2,
-//         });
-
-//         let window = Some(
-//             event_loop
-//                 .create_window(WindowAttributes::default().with_inner_size(window_size_winit))
-//                 .expect("Couldn't create window"),
-//         );
-
-//         let window_value = window.as_ref().expect("Window not created");
-
-//         let surface = unsafe {
-//             instance
-//                 .create_surface(&window_value)
-//                 .expect("Couldn't create GPU surface")
-//         };
-
-//         let mut renderer = CmnRenderer::new();
-
-//         let viewport = Viewport::new(window_size.width as f32, window_size.height as f32); // Or whatever your window size is
-//         let mut editor = Editor::new(viewport);
-
-//         futures::executor::block_on(renderer.initialize(window_size, &instance, &surface));
-
-//         self.window = window;
-//     }
-// }
-
-// impl ApplicationHandler for App {
-//     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-//         // establish winit window and render loop (until ready to embed in Floem app)
-//         if self.window.is_none() {
-//             println!("Window is none");
-//             let window_size = WindowSize {
-//                 width: 800,
-//                 height: 500,
-//             };
-//             let window_size_winit = PhysicalSize::new(window_size.width, window_size.height);
-
-//             self.start(event_loop, window_size, window_size_winit);
-//             // self.create_window(event_loop, window_size_winit);
-//             // let window_size = self.window.as_ref().unwrap().inner_size();
-//             // self.initialize_renderer(window_size);
-//         }
-
-//         // let window = Some(
-//         //     event_loop
-//         //         .create_window(Window::default_attributes().with_inner_size(window_size_winit))
-//         //         .expect("Couldn't create window"),
-//         // );
-
-//         // let mut renderer = CmnRenderer::new();
-
-//         // // Create logical components (instance, adapter, device, queue, surface, etc.)
-//         // let dx12_compiler = wgpu::Dx12Compiler::Dxc {
-//         //     dxil_path: None, // Specify a path to custom location
-//         //     dxc_path: None,  // Specify a path to custom location
-//         // };
-
-//         // let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-//         //     backends: wgpu::Backends::PRIMARY,
-//         //     dx12_shader_compiler: dx12_compiler,
-//         //     flags: wgpu::InstanceFlags::empty(),
-//         //     gles_minor_version: wgpu::Gles3MinorVersion::Version2,
-//         // });
-
-//         // let surface = unsafe {
-//         //     instance
-//         //         .create_surface(window.expect("Couldn't get window"))
-//         //         .expect("Couldn't create GPU surface")
-//         // };
-
-//         // println!("Ready...");
-
-//         // let viewport = Viewport::new(window_size.width as f32, window_size.height as f32); // Or whatever your window size is
-//         // let mut editor = Editor::new(viewport);
-
-//         // futures::executor::block_on(renderer.initialize(window_size, &instance, &surface));
-
-//         // println!("Initialized...");
-
-//         // let mut mouse_position = (0.0, 0.0);
-
-//         // // test items
-//         // // let path = Path {
-//         // //     commands: vec![
-//         // //         PathCommand::MoveTo(Point { x: 10.0, y: 10.0 }),
-//         // //         PathCommand::LineTo(Point { x: 100.0, y: 10.0 }),
-//         // //         PathCommand::QuadraticCurveTo(
-//         // //             Point { x: 150.0, y: 50.0 },
-//         // //             Point { x: 100.0, y: 100.0 },
-//         // //         ),
-//         // //         PathCommand::ClosePath,
-//         // //     ],
-//         // // };
-
-//         // // let polygon = Polygon {
-//         // //     points: vec![
-//         // //         Point { x: 200.0, y: 200.0 },
-//         // //         Point { x: 300.0, y: 200.0 },
-//         // //         Point { x: 250.0, y: 300.0 },
-//         // //     ],
-//         // // };
-
-//         // // let polygon = Polygon {
-//         // //     points: vec![
-//         // //         Point { x: 0.0, y: 0.0 },
-//         // //         Point { x: 100.0, y: 0.0 },
-//         // //         Point { x: 100.0, y: 100.0 },
-//         // //         Point { x: 0.0, y: 100.0 },
-//         // //     ],
-//         // // };
-
-//         // editor.polygons.push(Polygon {
-//         //     points: vec![
-//         //         Point { x: 100.0, y: 100.0 },
-//         //         Point { x: 200.0, y: 100.0 },
-//         //         Point { x: 200.0, y: 200.0 },
-//         //         Point { x: 100.0, y: 200.0 },
-//         //     ],
-//         // });
-
-//         // println!("Finished app setup...");
-//     }
-
-//     fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
-//         // println!("event {:?}", event);
-//         match event {
-//             WindowEvent::CloseRequested => {
-//                 println!("The close button was pressed; stopping");
-//                 event_loop.exit();
-//             }
-//             WindowEvent::RedrawRequested => {
-//                 // Redraw the application.
-//                 //
-//                 // It's preferable for applications that do not render continuously to render in
-//                 // this event rather than in AboutToWait, since rendering in here allows
-//                 // the program to gracefully handle redraws requested by the OS.
-
-//                 // Draw.
-
-//                 // Queue a RedrawRequested event.
-//                 //
-//                 // You only need to call this if you've determined that you need to redraw in
-//                 // applications which do not always need to. Applications that redraw continuously
-//                 // can render here instead.
-//                 // self.window.as_ref().unwrap().request_redraw();
-//                 println!("Redrawing...");
-//             }
-//             _ => (),
-//         }
-//     }
-// }
-
 fn main() {
     println!("Waiting for Floem power, for now, winit");
-
-    // let event_loop = EventLoop::new().unwrap();
-
-    // // ControlFlow::Poll continuously runs the event loop, even if the OS hasn't
-    // // dispatched any events. This is ideal for games and similar applications.
-    // event_loop.set_control_flow(ControlFlow::Poll);
-
-    // let mut app = App::default();
-    // event_loop
-    //     .run_app(&mut app)
-    //     .expect("Couldn't run event loop app");
 
     let window_size = WindowSize {
         width: 800,
