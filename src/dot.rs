@@ -41,11 +41,13 @@ pub fn draw_dot(
     let (x, y) = size_to_ndc(window_size, point.x, point.y);
     let dot_size = 5.0 / window_size.width.min(window_size.height) as f32; // 5 pixel dot
 
+    let dot_layer = 1;
+
     let vertices = vec![
-        Vertex::new(x - dot_size, y - dot_size, color),
-        Vertex::new(x + dot_size, y - dot_size, color),
-        Vertex::new(x + dot_size, y + dot_size, color),
-        Vertex::new(x - dot_size, y + dot_size, color),
+        Vertex::new(x - dot_size, y - dot_size, dot_layer, color),
+        Vertex::new(x + dot_size, y - dot_size, dot_layer, color),
+        Vertex::new(x + dot_size, y + dot_size, dot_layer, color),
+        Vertex::new(x - dot_size, y + dot_size, dot_layer, color),
     ];
 
     let indices = vec![0, 1, 2, 0, 2, 3];

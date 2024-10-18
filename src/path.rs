@@ -67,6 +67,8 @@ pub fn get_path_data(
     let mut current_point = Point { x: 0.0, y: 0.0 };
     let mut index = 0;
 
+    let path_layer = 2;
+
     for command in &commands {
         match command {
             PathCommand::MoveTo(point) => {
@@ -78,7 +80,7 @@ pub fn get_path_data(
                     .or_insert_with(|| {
                         let (x, y) = size_to_ndc(window_size, current_point.x, current_point.y);
                         let idx = index;
-                        vertices.push(Vertex::new(x, y, [1.0, 1.0, 1.0, 1.0])); // White color
+                        vertices.push(Vertex::new(x, y, path_layer, [1.0, 1.0, 1.0, 1.0])); // White color
                         index += 1;
                         idx
                     });
@@ -86,7 +88,7 @@ pub fn get_path_data(
                 let end_index = *vertex_map.entry(PointKey::from(*point)).or_insert_with(|| {
                     let (x, y) = size_to_ndc(window_size, point.x, point.y);
                     let idx = index;
-                    vertices.push(Vertex::new(x, y, [1.0, 1.0, 1.0, 1.0])); // White color
+                    vertices.push(Vertex::new(x, y, path_layer, [1.0, 1.0, 1.0, 1.0])); // White color
                     index += 1;
                     idx
                 });
@@ -95,7 +97,7 @@ pub fn get_path_data(
                 indices.push(end_index as u32);
                 current_point = *point;
             }
-            // TODO: do to_ndc convertion on the rest of these...
+            // TODO: do to_ndc convertion on the rest of these... also probably use Vertex::new
             PathCommand::QuadraticCurveTo(control, end) => {
                 // Approximate quadratic curve with line segments
                 let steps = 10; // Adjust for desired smoothness

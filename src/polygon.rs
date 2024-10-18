@@ -61,10 +61,12 @@ pub fn get_polygon_data(
     let mut vertices = Vec::new();
     let mut indices = Vec::new();
 
+    let polygon_layer = 2;
+
     // Create vertices
     for point in &points {
         let (x, y) = size_to_ndc(window_size, point.x, point.y);
-        vertices.push(Vertex::new(x, y, [1.0, 1.0, 1.0, 1.0])); // white color
+        vertices.push(Vertex::new(x, y, polygon_layer, [1.0, 1.0, 1.0, 1.0])); // white color
     }
 
     // Triangulate the polygon (assuming it's convex)
