@@ -11,3 +11,4 @@ floem = { git = "https://github.com/lapce/floem.git" }
 winit = "0.29"
 futures = "0.3.30"
 uuid = { version = "1.8.0", features = ["v4"] }
+lyon_tessellation = "1.0.15"

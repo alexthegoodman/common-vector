@@ -32,43 +32,7 @@ pub fn distance(a: Point, b: Point) -> f32 {
     (dx * dx + dy * dy).sqrt()
 }
 
-// pub fn draw_dot(
-//     device: &wgpu::Device,
-//     window_size: &WindowSize,
-//     point: Point,
-//     color: [f32; 4],
-// ) -> (Vec<Vertex>, Vec<u32>, wgpu::Buffer, wgpu::Buffer) {
-//     let (x, y) = size_to_ndc(window_size, point.x, point.y);
-//     let dot_size = 5.0 / window_size.width.min(window_size.height) as f32; // 5 pixel dot
-
-//     let dot_layer = 1;
-
-//     let vertices = vec![
-//         Vertex::new(x - dot_size, y - dot_size, dot_layer, color),
-//         Vertex::new(x + dot_size, y - dot_size, dot_layer, color),
-//         Vertex::new(x + dot_size, y + dot_size, dot_layer, color),
-//         Vertex::new(x - dot_size, y + dot_size, dot_layer, color),
-//     ];
-
-//     let indices = vec![0, 1, 2, 0, 2, 3];
-
-//     // Create a buffer for the vertices
-//     let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-//         label: Some("Dot Vertex Buffer"),
-//         contents: bytemuck::cast_slice(&vertices),
-//         usage: wgpu::BufferUsages::VERTEX,
-//     });
-
-//     // Create a buffer for the indices
-//     let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-//         label: Some("Dot Index Buffer"),
-//         contents: bytemuck::cast_slice(&indices),
-//         usage: wgpu::BufferUsages::INDEX,
-//     });
-
-//     (vertices, indices, vertex_buffer, index_buffer)
-// }
-
+// draws a ring currently
 pub fn draw_dot(
     device: &wgpu::Device,
     window_size: &WindowSize,

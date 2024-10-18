@@ -47,6 +47,61 @@ impl Shape for Polygon {
     }
 }
 
+// pub fn get_polygon_data(
+//     window_size: &WindowSize,
+//     device: &wgpu::Device,
+//     points: Vec<Point>,
+// ) -> (
+//     Vec<Vertex>,
+//     Vec<u32>,
+//     wgpu::Buffer,
+//     wgpu::Buffer,
+//     Vec<Point>,
+// ) {
+//     let mut vertices = Vec::new();
+//     let mut indices = Vec::new();
+
+//     let polygon_layer = 2;
+
+//     // Create vertices
+//     for point in &points {
+//         let (x, y) = size_to_ndc(window_size, point.x, point.y);
+//         vertices.push(Vertex::new(x, y, polygon_layer, [1.0, 1.0, 1.0, 1.0])); // white color
+//     }
+
+//     // Triangulate the polygon (assuming it's convex)
+//     if points.len() >= 3 {
+//         for i in 1..points.len() - 1 {
+//             indices.push(0);
+//             indices.push(i as u32);
+//             indices.push((i + 1) as u32);
+//         }
+//     }
+
+//     // Create a buffer for the vertices
+//     let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+//         label: Some("Vertex Buffer"),
+//         contents: bytemuck::cast_slice(&vertices),
+//         usage: wgpu::BufferUsages::VERTEX,
+//     });
+
+//     // Create a buffer for the indices
+//     let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+//         label: Some("Index Buffer"),
+//         contents: bytemuck::cast_slice(&indices),
+//         usage: wgpu::BufferUsages::INDEX,
+//     });
+
+//     println!("poly indices {:?}", indices);
+
+//     (vertices, indices, vertex_buffer, index_buffer, points)
+// }
+
+use lyon_tessellation::{
+    math::Point as LyonPoint, path::Path as LyonPath, BuffersBuilder, FillOptions, FillTessellator,
+    FillVertex, VertexBuffers,
+};
+
 pub fn get_polygon_data(
     window_size: &WindowSize,
     device: &wgpu::Device,
@@ -58,43 +113,49 @@ pub fn get_polygon_data(
     wgpu::Buffer,
     Vec<Point>,
 ) {
-    let mut vertices = Vec::new();
-    let mut indices = Vec::new();
+    let mut geometry: VertexBuffers<Vertex, u32> = VertexBuffers::new();
+    let mut tessellator = FillTessellator::new();
 
-    let polygon_layer = 2;
-
-    // Create vertices
-    for point in &points {
-        let (x, y) = size_to_ndc(window_size, point.x, point.y);
-        vertices.push(Vertex::new(x, y, polygon_layer, [1.0, 1.0, 1.0, 1.0])); // white color
+    // Convert points to lyon Path
+    let mut builder = LyonPath::builder();
+    builder.begin(LyonPoint::new(points[0].x, points[0].y));
+    for point in points.iter().skip(1) {
+        builder.line_to(LyonPoint::new(point.x, point.y));
     }
+    builder.close();
+    let path = builder.build();
 
-    // Triangulate the polygon (assuming it's convex)
-    if points.len() >= 3 {
-        for i in 1..points.len() - 1 {
-            indices.push(0);
-            indices.push(i as u32);
-            indices.push((i + 1) as u32);
-        }
-    }
+    // Perform tessellation
+    tessellator
+        .tessellate_path(
+            &path,
+            &FillOptions::default(),
+            &mut BuffersBuilder::new(&mut geometry, |vertex: FillVertex| {
+                let (x, y) = size_to_ndc(window_size, vertex.position().x, vertex.position().y);
+                Vertex::new(x, y, 2, [1.0, 1.0, 1.0, 1.0])
+            }),
+        )
+        .unwrap();
 
-    // Create a buffer for the vertices
     let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
         label: Some("Vertex Buffer"),
-        contents: bytemuck::cast_slice(&vertices),
+        contents: bytemuck::cast_slice(&geometry.vertices),
         usage: wgpu::BufferUsages::VERTEX,
     });
 
-    // Create a buffer for the indices
     let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
         label: Some("Index Buffer"),
-        contents: bytemuck::cast_slice(&indices),
+        contents: bytemuck::cast_slice(&geometry.indices),
         usage: wgpu::BufferUsages::INDEX,
     });
 
-    println!("poly indices {:?}", indices);
-
-    (vertices, indices, vertex_buffer, index_buffer, points)
+    (
+        geometry.vertices,
+        geometry.indices,
+        vertex_buffer,
+        index_buffer,
+        points,
+    )
 }
 
 impl Polygon {
@@ -174,6 +235,14 @@ impl Polygon {
     }
 }
 
+pub struct Polygon {
+    pub points: Vec<Point>,
+    pub vertices: Vec<Vertex>,
+    pub indices: Vec<u32>,
+    pub vertex_buffer: wgpu::Buffer,
+    pub index_buffer: wgpu::Buffer,
+}
+
 // Specific shape implementations
 // pub struct Rectangle {
 //     origin: Point,
@@ -185,11 +254,3 @@ impl Polygon {
 //     center: Point,
 //     radius: f32,
 // }
-
-pub struct Polygon {
-    pub points: Vec<Point>,
-    pub vertices: Vec<Vertex>,
-    pub indices: Vec<u32>,
-    pub vertex_buffer: wgpu::Buffer,
-    pub index_buffer: wgpu::Buffer,
-}
