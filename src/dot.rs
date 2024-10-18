@@ -32,6 +32,43 @@ pub fn distance(a: Point, b: Point) -> f32 {
     (dx * dx + dy * dy).sqrt()
 }
 
+// pub fn draw_dot(
+//     device: &wgpu::Device,
+//     window_size: &WindowSize,
+//     point: Point,
+//     color: [f32; 4],
+// ) -> (Vec<Vertex>, Vec<u32>, wgpu::Buffer, wgpu::Buffer) {
+//     let (x, y) = size_to_ndc(window_size, point.x, point.y);
+//     let dot_size = 5.0 / window_size.width.min(window_size.height) as f32; // 5 pixel dot
+
+//     let dot_layer = 1;
+
+//     let vertices = vec![
+//         Vertex::new(x - dot_size, y - dot_size, dot_layer, color),
+//         Vertex::new(x + dot_size, y - dot_size, dot_layer, color),
+//         Vertex::new(x + dot_size, y + dot_size, dot_layer, color),
+//         Vertex::new(x - dot_size, y + dot_size, dot_layer, color),
+//     ];
+
+//     let indices = vec![0, 1, 2, 0, 2, 3];
+
+//     // Create a buffer for the vertices
+//     let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+//         label: Some("Dot Vertex Buffer"),
+//         contents: bytemuck::cast_slice(&vertices),
+//         usage: wgpu::BufferUsages::VERTEX,
+//     });
+
+//     // Create a buffer for the indices
+//     let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+//         label: Some("Dot Index Buffer"),
+//         contents: bytemuck::cast_slice(&indices),
+//         usage: wgpu::BufferUsages::INDEX,
+//     });
+
+//     (vertices, indices, vertex_buffer, index_buffer)
+// }
+
 pub fn draw_dot(
     device: &wgpu::Device,
     window_size: &WindowSize,
@@ -39,34 +76,64 @@ pub fn draw_dot(
     color: [f32; 4],
 ) -> (Vec<Vertex>, Vec<u32>, wgpu::Buffer, wgpu::Buffer) {
     let (x, y) = size_to_ndc(window_size, point.x, point.y);
-    let dot_size = 5.0 / window_size.width.min(window_size.height) as f32; // 5 pixel dot
+    let outer_radius = 9.0 / window_size.width.min(window_size.height) as f32; // 5 pixel outer radius
+    let inner_radius = outer_radius * 0.7; // 70% of outer radius for inner circle
+    let segments = 32 as u32; // Number of segments to approximate the circle
 
     let dot_layer = 1;
 
-    let vertices = vec![
-        Vertex::new(x - dot_size, y - dot_size, dot_layer, color),
-        Vertex::new(x + dot_size, y - dot_size, dot_layer, color),
-        Vertex::new(x + dot_size, y + dot_size, dot_layer, color),
-        Vertex::new(x - dot_size, y + dot_size, dot_layer, color),
-    ];
+    let mut vertices = Vec::with_capacity((segments * 2) as usize);
+    let mut indices: Vec<u32> = Vec::with_capacity((segments * 6) as usize);
 
-    let indices = vec![0, 1, 2, 0, 2, 3];
+    // use indices to fill space between inner and outer vertices
+    for i in 0..segments {
+        let i = i as u32;
+        let angle = 2.0 * std::f32::consts::PI * i as f32 / segments as f32;
+        let (sin, cos) = angle.sin_cos();
+
+        // Outer vertex
+        vertices.push(Vertex::new(
+            x + outer_radius * cos,
+            y + outer_radius * sin,
+            dot_layer,
+            color,
+        ));
+
+        // Inner vertex
+        vertices.push(Vertex::new(
+            x + inner_radius * cos,
+            y + inner_radius * sin,
+            dot_layer,
+            color,
+        ));
+
+        let base = i * 2;
+        let next_base = ((i + 1) % segments) * 2;
+
+        // Two triangles to form a quad
+        indices.extend_from_slice(&[
+            base,
+            base + 1,
+            next_base + 1,
+            base,
+            next_base + 1,
+            next_base,
+        ]);
+    }
 
     // Create a buffer for the vertices
     let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: Some("Dot Vertex Buffer"),
+        label: Some("Ring Dot Vertex Buffer"),
         contents: bytemuck::cast_slice(&vertices),
         usage: wgpu::BufferUsages::VERTEX,
     });
 
     // Create a buffer for the indices
     let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: Some("Dot Index Buffer"),
+        label: Some("Ring Dot Index Buffer"),
         contents: bytemuck::cast_slice(&indices),
         usage: wgpu::BufferUsages::INDEX,
     });
-
-    // renderer.draw_indexed(surface, &vertices, &indices);
 
     (vertices, indices, vertex_buffer, index_buffer)
 }

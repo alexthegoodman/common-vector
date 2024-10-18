@@ -1,6 +1,7 @@
 use crate::basic::Point;
 use crate::polygon::Polygon;
 use crate::vertex::Vertex;
+use basic::rgb_to_wgpu;
 use dot::draw_dot;
 // use wgpu::{self, core::pipeline};
 use winit::dpi::PhysicalSize;
@@ -375,7 +376,7 @@ pub async fn initialize_core(event_loop: EventLoop<()>, window: Window, window_s
                                     &device,
                                     &window_size,
                                     edge_point.point,
-                                    [0.0, 1.0, 0.0, 1.0],
+                                    rgb_to_wgpu(47, 131, 222, 1.0),
                                 ); // Green dot
 
                                 render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
