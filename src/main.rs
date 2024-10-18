@@ -240,13 +240,20 @@ pub async fn initialize_core(event_loop: EventLoop<()>, window: Window, window_s
 
     // test items
     // Create a triangle that fills the entire bounding box
+    // let normalized_points = vec![
+    //     Point { x: 0.0, y: 0.0 },
+    //     Point { x: 1.0, y: 0.0 },
+    //     Point { x: 0.5, y: 1.0 },
+    // ];
     let normalized_points = vec![
         Point { x: 0.0, y: 0.0 },
         Point { x: 1.0, y: 0.0 },
-        Point { x: 0.5, y: 1.0 },
+        Point { x: 1.0, y: 1.0 },
+        Point { x: 0.0, y: 1.0 },
     ];
     let dimensions = (100.0, 100.0); // 100x100 pixels bounding box
     let position = Point { x: 100.0, y: 100.0 }; // Position in world space
+    let border_radius = 50.0;
 
     editor.polygons.push(Polygon::new(
         &window_size,
@@ -254,6 +261,7 @@ pub async fn initialize_core(event_loop: EventLoop<()>, window: Window, window_s
         normalized_points,
         dimensions,
         position,
+        border_radius,
     ));
 
     // editor.polygons[0].update_data_from_dimensions(&window_size, &device, (200.0, 50.0));
