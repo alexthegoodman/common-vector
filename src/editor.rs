@@ -56,9 +56,13 @@ impl Editor {
         self.hover_point = None;
 
         if let Some((poly_index, point_index)) = self.dragging_point {
-            self.polygons[poly_index].move_point(point_index, mouse_pos);
-            let points = self.polygons[poly_index].points.clone();
-            self.polygons[poly_index].update_data(window_size, device, points);
+            let polygon = &mut self.polygons[poly_index];
+            let normalized_pos = Point {
+                x: (mouse_pos.x - polygon.transform.position.x) / polygon.dimensions.0,
+                y: (mouse_pos.y - polygon.transform.position.y) / polygon.dimensions.1,
+            };
+            polygon.move_point(point_index, normalized_pos);
+            polygon.update_data_from_points(window_size, device, polygon.points.clone());
         } else {
             for polygon in &self.polygons {
                 if let Some(edge_point) = polygon.closest_point_on_edge(mouse_pos) {
@@ -84,11 +88,22 @@ impl Editor {
                     if (edge_point.point.x - hover_point.point.x).abs() < 1.0
                         && (edge_point.point.y - hover_point.point.y).abs() < 1.0
                     {
+                        let normalized_point = Point {
+                            x: (edge_point.point.x - polygon.transform.position.x)
+                                / polygon.dimensions.0,
+                            y: (edge_point.point.y - polygon.transform.position.y)
+                                / polygon.dimensions.1,
+                        };
                         polygon.add_point(
-                            edge_point.point,
+                            normalized_point,
                             edge_point.edge_index,
                             window_size,
                             device,
+                        );
+                        polygon.update_data_from_points(
+                            window_size,
+                            device,
+                            polygon.points.clone(),
                         );
                         self.dragging_point = Some((poly_index, edge_point.edge_index + 1));
                         break;
@@ -97,12 +112,13 @@ impl Editor {
             }
         } else {
             for (poly_index, polygon) in self.polygons.iter_mut().enumerate() {
-                for (point_index, point) in polygon.points.iter().enumerate() {
-                    if distance(*point, mouse_pos) < 5.0 {
+                for (point_index, &normalized_point) in polygon.points.iter().enumerate() {
+                    let world_point = Point {
+                        x: normalized_point.x * polygon.dimensions.0 + polygon.transform.position.x,
+                        y: normalized_point.y * polygon.dimensions.1 + polygon.transform.position.y,
+                    };
+                    if distance(world_point, mouse_pos) < 5.0 {
                         self.dragging_point = Some((poly_index, point_index));
-                        // update data while dragging
-                        // TODO: update polygon.points[i] with latest position
-                        polygon.update_data(window_size, device, polygon.points.clone());
                         return;
                     }
                 }

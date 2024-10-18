@@ -4,6 +4,7 @@ use crate::{
     basic::{BoundingBox, Point, Shape},
     dot::{closest_point_on_line_segment, distance, EdgePoint},
     editor::size_to_ndc,
+    transform::Transform,
     vertex::Vertex,
     WindowSize,
 };
@@ -47,56 +48,6 @@ impl Shape for Polygon {
     }
 }
 
-// pub fn get_polygon_data(
-//     window_size: &WindowSize,
-//     device: &wgpu::Device,
-//     points: Vec<Point>,
-// ) -> (
-//     Vec<Vertex>,
-//     Vec<u32>,
-//     wgpu::Buffer,
-//     wgpu::Buffer,
-//     Vec<Point>,
-// ) {
-//     let mut vertices = Vec::new();
-//     let mut indices = Vec::new();
-
-//     let polygon_layer = 2;
-
-//     // Create vertices
-//     for point in &points {
-//         let (x, y) = size_to_ndc(window_size, point.x, point.y);
-//         vertices.push(Vertex::new(x, y, polygon_layer, [1.0, 1.0, 1.0, 1.0])); // white color
-//     }
-
-//     // Triangulate the polygon (assuming it's convex)
-//     if points.len() >= 3 {
-//         for i in 1..points.len() - 1 {
-//             indices.push(0);
-//             indices.push(i as u32);
-//             indices.push((i + 1) as u32);
-//         }
-//     }
-
-//     // Create a buffer for the vertices
-//     let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-//         label: Some("Vertex Buffer"),
-//         contents: bytemuck::cast_slice(&vertices),
-//         usage: wgpu::BufferUsages::VERTEX,
-//     });
-
-//     // Create a buffer for the indices
-//     let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-//         label: Some("Index Buffer"),
-//         contents: bytemuck::cast_slice(&indices),
-//         usage: wgpu::BufferUsages::INDEX,
-//     });
-
-//     println!("poly indices {:?}", indices);
-
-//     (vertices, indices, vertex_buffer, index_buffer, points)
-// }
-
 use lyon_tessellation::{
     math::Point as LyonPoint, path::Path as LyonPath, BuffersBuilder, FillOptions, FillTessellator,
     FillVertex, VertexBuffers,
@@ -106,6 +57,8 @@ pub fn get_polygon_data(
     window_size: &WindowSize,
     device: &wgpu::Device,
     points: Vec<Point>,
+    dimensions: (f32, f32),
+    transform: &Transform,
 ) -> (
     Vec<Vertex>,
     Vec<u32>,
@@ -116,11 +69,18 @@ pub fn get_polygon_data(
     let mut geometry: VertexBuffers<Vertex, u32> = VertexBuffers::new();
     let mut tessellator = FillTessellator::new();
 
-    // Convert points to lyon Path
+    // Convert normalized points to lyon Path
     let mut builder = LyonPath::builder();
-    builder.begin(LyonPoint::new(points[0].x, points[0].y));
+    let first_point = points[0];
+    builder.begin(LyonPoint::new(
+        first_point.x * dimensions.0,
+        first_point.y * dimensions.1,
+    ));
     for point in points.iter().skip(1) {
-        builder.line_to(LyonPoint::new(point.x, point.y));
+        builder.line_to(LyonPoint::new(
+            point.x * dimensions.0,
+            point.y * dimensions.1,
+        ));
     }
     builder.close();
     let path = builder.build();
@@ -131,7 +91,12 @@ pub fn get_polygon_data(
             &path,
             &FillOptions::default(),
             &mut BuffersBuilder::new(&mut geometry, |vertex: FillVertex| {
-                let (x, y) = size_to_ndc(window_size, vertex.position().x, vertex.position().y);
+                let x = ((vertex.position().x + transform.position.x) / window_size.width as f32)
+                    * 2.0
+                    - 1.0;
+                let y = 1.0
+                    - ((vertex.position().y + transform.position.y) / window_size.height as f32)
+                        * 2.0;
                 Vertex::new(x, y, 2, [1.0, 1.0, 1.0, 1.0])
             }),
         )
@@ -159,12 +124,21 @@ pub fn get_polygon_data(
 }
 
 impl Polygon {
-    pub fn new(window_size: &WindowSize, device: &wgpu::Device, points: Vec<Point>) -> Self {
+    pub fn new(
+        window_size: &WindowSize,
+        device: &wgpu::Device,
+        points: Vec<Point>,
+        dimensions: (f32, f32),
+        position: Point,
+    ) -> Self {
+        let transform = Transform::new(position);
         let (vertices, indices, vertex_buffer, index_buffer, points) =
-            get_polygon_data(window_size, device, points);
+            get_polygon_data(window_size, device, points, dimensions, &transform);
 
         Polygon {
             points,
+            dimensions,
+            transform,
             vertices,
             indices,
             vertex_buffer,
@@ -172,16 +146,66 @@ impl Polygon {
         }
     }
 
-    pub fn update_data(
+    pub fn update_data_from_points(
         &mut self,
         window_size: &WindowSize,
         device: &wgpu::Device,
         points: Vec<Point>,
     ) {
-        let (vertices, indices, vertex_buffer, index_buffer, points) =
-            get_polygon_data(window_size, device, points);
+        let (vertices, indices, vertex_buffer, index_buffer, points) = get_polygon_data(
+            window_size,
+            device,
+            points,
+            self.dimensions,
+            &self.transform,
+        );
 
         self.points = points;
+        // self.dimensions = dimensions;
+        self.vertices = vertices;
+        self.indices = indices;
+        self.vertex_buffer = vertex_buffer;
+        self.index_buffer = index_buffer;
+    }
+
+    pub fn update_data_from_dimensions(
+        &mut self,
+        window_size: &WindowSize,
+        device: &wgpu::Device,
+        dimensions: (f32, f32),
+    ) {
+        let (vertices, indices, vertex_buffer, index_buffer, points) = get_polygon_data(
+            window_size,
+            device,
+            self.points.clone(),
+            dimensions,
+            &self.transform,
+        );
+
+        // self.points = points;
+        self.dimensions = dimensions;
+        self.vertices = vertices;
+        self.indices = indices;
+        self.vertex_buffer = vertex_buffer;
+        self.index_buffer = index_buffer;
+    }
+
+    pub fn update_data_from_position(
+        &mut self,
+        window_size: &WindowSize,
+        device: &wgpu::Device,
+        position: Point,
+    ) {
+        self.transform.position = position;
+
+        let (vertices, indices, vertex_buffer, index_buffer, points) = get_polygon_data(
+            window_size,
+            device,
+            self.points.clone(),
+            self.dimensions,
+            &self.transform,
+        );
+
         self.vertices = vertices;
         self.indices = indices;
         self.vertex_buffer = vertex_buffer;
@@ -192,24 +216,35 @@ impl Polygon {
         let mut closest_point = None;
         let mut min_distance = f32::MAX;
 
+        // Convert mouse_pos to normalized coordinates
+        let normalized_mouse_pos = Point {
+            x: (mouse_pos.x - self.transform.position.x) / self.dimensions.0,
+            y: (mouse_pos.y - self.transform.position.y) / self.dimensions.1,
+        };
+
         for i in 0..self.points.len() {
             let start = self.points[i];
             let end = self.points[(i + 1) % self.points.len()];
 
-            let point = closest_point_on_line_segment(start, end, mouse_pos);
-            let distance = distance(point, mouse_pos);
+            let point = closest_point_on_line_segment(start, end, normalized_mouse_pos);
+            let distance = distance(point, normalized_mouse_pos);
 
             if distance < min_distance {
                 min_distance = distance;
                 closest_point = Some(EdgePoint {
-                    point,
+                    point: Point {
+                        x: point.x * self.dimensions.0 + self.transform.position.x,
+                        y: point.y * self.dimensions.1 + self.transform.position.y,
+                    },
                     edge_index: i,
                 });
             }
         }
 
-        if min_distance < 5.0 {
-            // 5 pixels threshold
+        // Convert the distance threshold to normalized space
+        let normalized_threshold = 5.0 / self.dimensions.0.min(self.dimensions.1);
+
+        if min_distance < normalized_threshold {
             closest_point
         } else {
             None
@@ -225,7 +260,7 @@ impl Polygon {
     ) {
         println!("Add point");
         self.points.insert(edge_index + 1, new_point);
-        self.update_data(window_size, device, self.points.clone());
+        self.update_data_from_points(window_size, device, self.points.clone());
     }
 
     pub fn move_point(&mut self, point_index: usize, new_position: Point) {
@@ -237,6 +272,8 @@ impl Polygon {
 
 pub struct Polygon {
     pub points: Vec<Point>,
+    pub dimensions: (f32, f32), // (width, height) in pixels
+    pub transform: Transform,
     pub vertices: Vec<Vertex>,
     pub indices: Vec<u32>,
     pub vertex_buffer: wgpu::Buffer,

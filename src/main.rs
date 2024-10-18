@@ -18,6 +18,7 @@ mod dot;
 mod editor;
 mod path;
 mod polygon;
+mod transform;
 mod vertex;
 
 // Styling information
@@ -238,16 +239,24 @@ pub async fn initialize_core(event_loop: EventLoop<()>, window: Window, window_s
     let mut mouse_position = (0.0, 0.0);
 
     // test items
+    // Create a triangle that fills the entire bounding box
+    let normalized_points = vec![
+        Point { x: 0.0, y: 0.0 },
+        Point { x: 1.0, y: 0.0 },
+        Point { x: 0.5, y: 1.0 },
+    ];
+    let dimensions = (100.0, 100.0); // 100x100 pixels bounding box
+    let position = Point { x: 100.0, y: 100.0 }; // Position in world space
+
     editor.polygons.push(Polygon::new(
         &window_size,
         &device,
-        vec![
-            Point { x: 100.0, y: 100.0 },
-            Point { x: 200.0, y: 100.0 },
-            Point { x: 200.0, y: 200.0 },
-            // Point { x: 100.0, y: 200.0 },
-        ],
+        normalized_points,
+        dimensions,
+        position,
     ));
+
+    // editor.polygons[0].update_data_from_dimensions(&window_size, &device, (200.0, 50.0));
 
     // execute winit render loop
     let window = &window;
