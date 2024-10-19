@@ -1,8 +1,12 @@
+use std::cell::RefCell;
+use std::sync::Arc;
+
 use crate::basic::Point;
 use crate::polygon::Polygon;
 use crate::vertex::Vertex;
-use basic::rgb_to_wgpu;
+use basic::{rgb_to_wgpu, WindowSize};
 use dot::draw_dot;
+use guideline::create_guide_line_buffers;
 // use wgpu::{self, core::pipeline};
 use winit::dpi::PhysicalSize;
 use winit::{
@@ -14,13 +18,14 @@ use winit::{
 use crate::editor::{Editor, Viewport};
 use wgpu::util::DeviceExt;
 
-mod basic;
-mod dot;
-mod editor;
-mod path;
-mod polygon;
-mod transform;
-mod vertex;
+pub mod basic;
+pub mod dot;
+pub mod editor;
+pub mod guideline;
+pub mod path;
+pub mod polygon;
+pub mod transform;
+pub mod vertex;
 
 // Styling information
 // struct Style {
@@ -61,96 +66,6 @@ mod vertex;
 //     width: f32,
 //     height: f32,
 // }
-
-pub struct WindowSize {
-    width: u32,
-    height: u32,
-}
-
-const GUIDE_LINE_THICKNESS: f32 = 2.0; // Thickness in pixels
-
-fn create_guide_line_buffers(
-    device: &wgpu::Device,
-    window_size: &WindowSize,
-    start: Point,
-    end: Point,
-    color: [f32; 4],
-) -> (Vec<Vertex>, Vec<u32>, wgpu::Buffer, wgpu::Buffer) {
-    let dx = end.x - start.x;
-    let dy = end.y - start.y;
-    let length = (dx * dx + dy * dy).sqrt();
-    let unit_x = dx / length;
-    let unit_y = dy / length;
-
-    // Calculate the perpendicular unit vector
-    let perp_x = -unit_y;
-    let perp_y = unit_x;
-
-    // Calculate the half-thickness in NDC space
-    let half_thickness = GUIDE_LINE_THICKNESS / 2.0;
-    let half_thickness_ndc_x = half_thickness / window_size.width as f32;
-    let half_thickness_ndc_y = half_thickness / window_size.height as f32;
-
-    // Calculate the four corners of the rectangle
-    let p1 = point_to_ndc(
-        Point {
-            x: start.x + perp_x * half_thickness,
-            y: start.y + perp_y * half_thickness,
-        },
-        window_size,
-    );
-    let p2 = point_to_ndc(
-        Point {
-            x: start.x - perp_x * half_thickness,
-            y: start.y - perp_y * half_thickness,
-        },
-        window_size,
-    );
-    let p3 = point_to_ndc(
-        Point {
-            x: end.x - perp_x * half_thickness,
-            y: end.y - perp_y * half_thickness,
-        },
-        window_size,
-    );
-    let p4 = point_to_ndc(
-        Point {
-            x: end.x + perp_x * half_thickness,
-            y: end.y + perp_y * half_thickness,
-        },
-        window_size,
-    );
-
-    let vertices = vec![
-        Vertex::new(p1.x, p1.y, 3, color),
-        Vertex::new(p2.x, p2.y, 3, color),
-        Vertex::new(p3.x, p3.y, 3, color),
-        Vertex::new(p4.x, p4.y, 3, color),
-    ];
-
-    let indices = vec![0, 1, 2, 2, 3, 0];
-
-    let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: Some("Guide Line Vertex Buffer"),
-        contents: bytemuck::cast_slice(&vertices),
-        usage: wgpu::BufferUsages::VERTEX,
-    });
-
-    let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: Some("Guide Line Index Buffer"),
-        contents: bytemuck::cast_slice(&indices),
-        usage: wgpu::BufferUsages::INDEX,
-    });
-
-    (vertices, indices, vertex_buffer, index_buffer)
-}
-
-fn point_to_ndc(point: Point, window_size: &WindowSize) -> Point {
-    Point {
-        x: (point.x / window_size.width as f32) * 2.0 - 1.0,
-        y: 1.0 - (point.y / window_size.height as f32) * 2.0,
-    }
-}
 
 // I sure do love initializing wgpu this way
 pub async fn initialize_core(event_loop: EventLoop<()>, window: Window, window_size: WindowSize) {
@@ -425,8 +340,8 @@ pub async fn initialize_core(event_loop: EventLoop<()>, window: Window, window_s
                         if button == MouseButton::Left {
                             match state {
                                 ElementState::Pressed => editor.handle_mouse_down(
-                                    mouse_position.0,
-                                    mouse_position.1,
+                                    // mouse_position.0,
+                                    // mouse_position.1,
                                     &window_size,
                                     &device,
                                 ),

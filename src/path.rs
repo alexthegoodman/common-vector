@@ -2,10 +2,10 @@ use std::collections::HashMap;
 use wgpu::util::DeviceExt;
 
 use crate::{
+    basic::WindowSize,
     basic::{BoundingBox, Point, PointKey, Shape},
     editor::size_to_ndc,
     vertex::Vertex,
-    WindowSize,
 };
 
 impl Shape for Path {

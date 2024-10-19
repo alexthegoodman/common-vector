@@ -1,12 +1,12 @@
 use wgpu::util::DeviceExt;
 
 use crate::{
+    basic::WindowSize,
     basic::{BoundingBox, Point, Shape},
     dot::{closest_point_on_line_segment, distance, EdgePoint},
     editor::size_to_ndc,
     transform::Transform,
     vertex::Vertex,
-    WindowSize,
 };
 
 impl Shape for Polygon {

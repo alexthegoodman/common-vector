@@ -1,9 +1,9 @@
 use crate::basic::Shape;
 use crate::{
     basic::Point,
+    basic::WindowSize,
     dot::{distance, EdgePoint},
     polygon::Polygon,
-    WindowSize,
 };
 
 pub struct Viewport {
@@ -42,6 +42,8 @@ pub struct Editor {
     pub guide_lines: Vec<GuideLine>,
     pub viewport: Viewport,
     pub drag_start: Option<Point>,
+    pub last_x: f32,
+    pub last_y: f32,
 }
 
 impl Editor {
@@ -54,16 +56,20 @@ impl Editor {
             guide_lines: Vec::new(),
             viewport,
             drag_start: None,
+            last_x: 0.0,
+            last_y: 0.0,
         }
     }
 
     pub fn handle_mouse_down(
         &mut self,
-        x: f32,
-        y: f32,
+        // x: f32,
+        // y: f32,
         window_size: &WindowSize,
         device: &wgpu::Device,
     ) {
+        let x = self.last_x;
+        let y = self.last_y;
         let mouse_pos = Point { x, y };
 
         if let Some(hover_point) = self.hover_point {
@@ -130,6 +136,9 @@ impl Editor {
         let mouse_pos = Point { x, y };
         self.hover_point = None;
         self.guide_lines.clear();
+
+        self.last_x = x;
+        self.last_y = y;
 
         if let Some((poly_index, point_index)) = self.dragging_point {
             let polygon = &mut self.polygons[poly_index];

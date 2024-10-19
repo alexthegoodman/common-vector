@@ -1,6 +1,6 @@
 use wgpu::util::DeviceExt;
 
-use crate::{basic::Point, editor::size_to_ndc, vertex::Vertex, WindowSize};
+use crate::{basic::Point, basic::WindowSize, editor::size_to_ndc, vertex::Vertex};
 
 #[derive(Clone, Copy)]
 pub struct EdgePoint {

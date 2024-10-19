@@ -1,3 +1,9 @@
+#[derive(Debug, Clone, Copy)]
+pub struct WindowSize {
+    pub width: u32,
+    pub height: u32,
+}
+
 // Basic 2D point structure
 #[derive(Clone, Copy)]
 pub struct Point {
