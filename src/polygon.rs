@@ -30,15 +30,21 @@ impl Shape for Polygon {
     }
 
     fn contains_point(&self, point: &Point) -> bool {
+        // Convert the point to the polygon's local coordinate system
+        let local_point = Point {
+            x: (point.x - self.transform.position.x) / self.dimensions.0,
+            y: (point.y - self.transform.position.y) / self.dimensions.1,
+        };
+
         // Implement point-in-polygon test using the ray casting algorithm
         let mut inside = false;
         let mut j = self.points.len() - 1;
         for i in 0..self.points.len() {
-            if ((self.points[i].y > point.y) != (self.points[j].y > point.y))
-                && (point.x
-                    < (self.points[j].x - self.points[i].x) * (point.y - self.points[i].y)
-                        / (self.points[j].y - self.points[i].y)
-                        + self.points[i].x)
+            let pi = &self.points[i];
+            let pj = &self.points[j];
+
+            if ((pi.y > local_point.y) != (pj.y > local_point.y))
+                && (local_point.x < (pj.x - pi.x) * (local_point.y - pi.y) / (pj.y - pi.y) + pi.x)
             {
                 inside = !inside;
             }
@@ -420,6 +426,27 @@ impl Polygon {
         self.indices = indices;
         self.vertex_buffer = vertex_buffer;
         self.index_buffer = index_buffer;
+    }
+
+    pub fn world_bounding_box(&self) -> BoundingBox {
+        let mut min_x = f32::MAX;
+        let mut min_y = f32::MAX;
+        let mut max_x = f32::MIN;
+        let mut max_y = f32::MIN;
+
+        for point in &self.points {
+            let world_x = point.x * self.dimensions.0 + self.transform.position.x;
+            let world_y = point.y * self.dimensions.1 + self.transform.position.y;
+            min_x = min_x.min(world_x);
+            min_y = min_y.min(world_y);
+            max_x = max_x.max(world_x);
+            max_y = max_y.max(world_y);
+        }
+
+        BoundingBox {
+            min: Point { x: min_x, y: min_y },
+            max: Point { x: max_x, y: max_y },
+        }
     }
 
     pub fn closest_point_on_edge(&self, mouse_pos: Point) -> Option<EdgePoint> {

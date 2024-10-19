@@ -12,6 +12,7 @@ use winit::{
 };
 // use winit::{event_loop, window};
 use crate::editor::{Editor, Viewport};
+use wgpu::util::DeviceExt;
 
 mod basic;
 mod dot;
@@ -64,6 +65,91 @@ mod vertex;
 pub struct WindowSize {
     width: u32,
     height: u32,
+}
+
+const GUIDE_LINE_THICKNESS: f32 = 2.0; // Thickness in pixels
+
+fn create_guide_line_buffers(
+    device: &wgpu::Device,
+    window_size: &WindowSize,
+    start: Point,
+    end: Point,
+    color: [f32; 4],
+) -> (Vec<Vertex>, Vec<u32>, wgpu::Buffer, wgpu::Buffer) {
+    let dx = end.x - start.x;
+    let dy = end.y - start.y;
+    let length = (dx * dx + dy * dy).sqrt();
+    let unit_x = dx / length;
+    let unit_y = dy / length;
+
+    // Calculate the perpendicular unit vector
+    let perp_x = -unit_y;
+    let perp_y = unit_x;
+
+    // Calculate the half-thickness in NDC space
+    let half_thickness = GUIDE_LINE_THICKNESS / 2.0;
+    let half_thickness_ndc_x = half_thickness / window_size.width as f32;
+    let half_thickness_ndc_y = half_thickness / window_size.height as f32;
+
+    // Calculate the four corners of the rectangle
+    let p1 = point_to_ndc(
+        Point {
+            x: start.x + perp_x * half_thickness,
+            y: start.y + perp_y * half_thickness,
+        },
+        window_size,
+    );
+    let p2 = point_to_ndc(
+        Point {
+            x: start.x - perp_x * half_thickness,
+            y: start.y - perp_y * half_thickness,
+        },
+        window_size,
+    );
+    let p3 = point_to_ndc(
+        Point {
+            x: end.x - perp_x * half_thickness,
+            y: end.y - perp_y * half_thickness,
+        },
+        window_size,
+    );
+    let p4 = point_to_ndc(
+        Point {
+            x: end.x + perp_x * half_thickness,
+            y: end.y + perp_y * half_thickness,
+        },
+        window_size,
+    );
+
+    let vertices = vec![
+        Vertex::new(p1.x, p1.y, 3, color),
+        Vertex::new(p2.x, p2.y, 3, color),
+        Vertex::new(p3.x, p3.y, 3, color),
+        Vertex::new(p4.x, p4.y, 3, color),
+    ];
+
+    let indices = vec![0, 1, 2, 2, 3, 0];
+
+    let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("Guide Line Vertex Buffer"),
+        contents: bytemuck::cast_slice(&vertices),
+        usage: wgpu::BufferUsages::VERTEX,
+    });
+
+    let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("Guide Line Index Buffer"),
+        contents: bytemuck::cast_slice(&indices),
+        usage: wgpu::BufferUsages::INDEX,
+    });
+
+    (vertices, indices, vertex_buffer, index_buffer)
+}
+
+fn point_to_ndc(point: Point, window_size: &WindowSize) -> Point {
+    Point {
+        x: (point.x / window_size.width as f32) * 2.0 - 1.0,
+        y: 1.0 - (point.y / window_size.height as f32) * 2.0,
+    }
 }
 
 // I sure do love initializing wgpu this way
@@ -245,23 +331,68 @@ pub async fn initialize_core(event_loop: EventLoop<()>, window: Window, window_s
     //     Point { x: 1.0, y: 0.0 },
     //     Point { x: 0.5, y: 1.0 },
     // ];
-    let normalized_points = vec![
-        Point { x: 0.0, y: 0.0 },
-        Point { x: 1.0, y: 0.0 },
-        Point { x: 1.0, y: 1.0 },
-        Point { x: 0.0, y: 1.0 },
-    ];
-    let dimensions = (100.0, 100.0); // 100x100 pixels bounding box
-    let position = Point { x: 100.0, y: 100.0 }; // Position in world space
-    let border_radius = 50.0;
+    // let normalized_points = vec![
+    //     Point { x: 0.0, y: 0.0 },
+    //     Point { x: 1.0, y: 0.0 },
+    //     Point { x: 1.0, y: 1.0 },
+    //     Point { x: 0.0, y: 1.0 },
+    // ];
+    // let dimensions = (100.0, 100.0); // 100x100 pixels bounding box
+    // let position = Point { x: 100.0, y: 100.0 }; // Position in world space
+    // let border_radius = 50.0;
 
+    // editor.polygons.push(Polygon::new(
+    //     &window_size,
+    //     &device,
+    //     normalized_points,
+    //     dimensions,
+    //     position,
+    //     border_radius,
+    // ));
+
+    // Create a triangle
     editor.polygons.push(Polygon::new(
         &window_size,
         &device,
-        normalized_points,
-        dimensions,
-        position,
-        border_radius,
+        vec![
+            Point { x: 0.0, y: 0.0 },
+            Point { x: 1.0, y: 0.0 },
+            Point { x: 0.5, y: 1.0 },
+        ],
+        (100.0, 100.0),
+        Point { x: 100.0, y: 100.0 },
+        5.0, // border radius
+    ));
+
+    // Create a rectangle
+    editor.polygons.push(Polygon::new(
+        &window_size,
+        &device,
+        vec![
+            Point { x: 0.0, y: 0.0 },
+            Point { x: 1.0, y: 0.0 },
+            Point { x: 1.0, y: 1.0 },
+            Point { x: 0.0, y: 1.0 },
+        ],
+        (150.0, 100.0),
+        Point { x: 300.0, y: 200.0 },
+        10.0, // border radius
+    ));
+
+    // Create a pentagon
+    editor.polygons.push(Polygon::new(
+        &window_size,
+        &device,
+        vec![
+            Point { x: 0.5, y: 0.0 },
+            Point { x: 1.0, y: 0.4 },
+            Point { x: 0.8, y: 1.0 },
+            Point { x: 0.2, y: 1.0 },
+            Point { x: 0.0, y: 0.4 },
+        ],
+        (120.0, 120.0),
+        Point { x: 500.0, y: 300.0 },
+        8.0, // border radius
     ));
 
     // editor.polygons[0].update_data_from_dimensions(&window_size, &device, (200.0, 50.0));
@@ -395,6 +526,32 @@ pub async fn initialize_core(event_loop: EventLoop<()>, window: Window, window_s
                                     edge_point.point,
                                     rgb_to_wgpu(47, 131, 222, 1.0),
                                 ); // Green dot
+
+                                render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
+                                render_pass.set_index_buffer(
+                                    index_buffer.slice(..),
+                                    wgpu::IndexFormat::Uint32,
+                                );
+                                render_pass.draw_indexed(0..indices.len() as u32, 0, 0..1);
+                            }
+
+                            // Draw guide lines
+                            for guide_line in &editor.guide_lines {
+                                println!(
+                                    "Rendering guideline {:?} {:?} {:?} {:?}",
+                                    guide_line.start.x,
+                                    guide_line.start.y,
+                                    guide_line.end.x,
+                                    guide_line.end.y
+                                );
+                                let (vertices, indices, vertex_buffer, index_buffer) =
+                                    create_guide_line_buffers(
+                                        &device,
+                                        &window_size,
+                                        guide_line.start,
+                                        guide_line.end,
+                                        rgb_to_wgpu(47, 131, 222, 1.0), // Blue color for guide lines
+                                    );
 
                                 render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
                                 render_pass.set_index_buffer(
