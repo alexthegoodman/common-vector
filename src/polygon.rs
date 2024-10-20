@@ -339,6 +339,26 @@ impl Polygon {
         }
     }
 
+    pub fn update_data_from_window_size(
+        &mut self,
+        window_size: &WindowSize,
+        device: &wgpu::Device,
+    ) {
+        let (vertices, indices, vertex_buffer, index_buffer) = get_polygon_data(
+            window_size,
+            device,
+            self.points.clone(),
+            self.dimensions,
+            &self.transform,
+            self.border_radius,
+        );
+
+        self.vertices = vertices;
+        self.indices = indices;
+        self.vertex_buffer = vertex_buffer;
+        self.index_buffer = index_buffer;
+    }
+
     pub fn update_data_from_points(
         &mut self,
         window_size: &WindowSize,
@@ -516,6 +536,13 @@ pub struct Polygon {
     pub indices: Vec<u32>,
     pub vertex_buffer: wgpu::Buffer,
     pub index_buffer: wgpu::Buffer,
+}
+
+pub struct PolygonConfig {
+    pub points: Vec<Point>,
+    pub dimensions: (f32, f32), // (width, height) in pixels
+    pub position: Point,
+    pub border_radius: f32,
 }
 
 // Specific shape implementations

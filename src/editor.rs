@@ -1,3 +1,8 @@
+use std::cell::RefCell;
+use std::sync::{Arc, Mutex, MutexGuard};
+
+use floem_renderer::gpu_resources::GpuResources;
+
 use crate::basic::Shape;
 use crate::{
     basic::Point,
@@ -6,6 +11,7 @@ use crate::{
     polygon::Polygon,
 };
 
+#[derive(Clone, Copy)]
 pub struct Viewport {
     pub width: f32,
     pub height: f32,
@@ -40,14 +46,18 @@ pub struct Editor {
     pub dragging_point: Option<(usize, usize)>, // (polygon_index, point_index)
     pub dragging_polygon: Option<usize>,
     pub guide_lines: Vec<GuideLine>,
-    pub viewport: Viewport,
+    pub viewport: Arc<Mutex<Viewport>>,
     pub drag_start: Option<Point>,
     pub last_x: f32,
     pub last_y: f32,
+    // pub button_handler: Option<Box<dyn Fn(&mut Editor)>>,
+    // button_handler: RefCell<Option<Box<dyn Fn(MutexGuard<'_, Editor>) + Send + 'static>>>,
 }
 
+use std::borrow::BorrowMut;
+
 impl Editor {
-    pub fn new(viewport: Viewport) -> Self {
+    pub fn new(viewport: Arc<Mutex<Viewport>>) -> Self {
         Editor {
             polygons: Vec::new(),
             hover_point: None,
@@ -58,6 +68,16 @@ impl Editor {
             drag_start: None,
             last_x: 0.0,
             last_y: 0.0,
+        }
+    }
+
+    pub fn update_date_from_window_resize(
+        &mut self,
+        window_size: &WindowSize,
+        device: &wgpu::Device,
+    ) {
+        for (poly_index, polygon) in self.polygons.iter_mut().enumerate() {
+            polygon.update_data_from_window_size(window_size, device);
         }
     }
 
