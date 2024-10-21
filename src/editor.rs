@@ -2,8 +2,10 @@ use std::cell::RefCell;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use floem_renderer::gpu_resources::GpuResources;
+use uuid::Uuid;
 
 use crate::basic::Shape;
+use crate::polygon::PolygonConfig;
 use crate::{
     basic::Point,
     basic::WindowSize,
@@ -40,6 +42,8 @@ pub struct GuideLine {
     pub end: Point,
 }
 
+type PolygonClickHandler = dyn Fn() -> Option<Box<dyn FnMut(Uuid, PolygonConfig)>>;
+
 pub struct Editor {
     pub polygons: Vec<Polygon>,
     pub hover_point: Option<EdgePoint>,
@@ -52,6 +56,8 @@ pub struct Editor {
     pub last_y: f32,
     // pub button_handler: Option<Box<dyn Fn(&mut Editor)>>,
     // button_handler: RefCell<Option<Box<dyn Fn(MutexGuard<'_, Editor>) + Send + 'static>>>,
+    pub handle_polygon_click: Option<Arc<PolygonClickHandler>>,
+    pub gpu_resources: Option<Arc<GpuResources>>,
 }
 
 use std::borrow::BorrowMut;
@@ -68,6 +74,8 @@ impl Editor {
             drag_start: None,
             last_x: 0.0,
             last_y: 0.0,
+            handle_polygon_click: None,
+            gpu_resources: None,
         }
     }
 
@@ -127,6 +135,23 @@ impl Editor {
             if polygon.contains_point(&mouse_pos) {
                 self.dragging_polygon = Some(poly_index);
                 self.drag_start = Some(mouse_pos);
+                if (self.handle_polygon_click.is_some()) {
+                    let handler_creator = self
+                        .handle_polygon_click
+                        .as_ref()
+                        .expect("Couldn't get handler");
+                    let mut handle_click = handler_creator().expect("Couldn't get handler");
+                    handle_click(
+                        polygon.id,
+                        PolygonConfig {
+                            points: polygon.points.clone(),
+                            dimensions: polygon.dimensions,
+                            position: polygon.transform.position,
+                            border_radius: polygon.border_radius,
+                            fill: polygon.fill,
+                        },
+                    );
+                }
                 return;
             }
         }
@@ -222,7 +247,7 @@ impl Editor {
                         y: window_size.height as f32,
                     },
                 });
-                println!("Vertical guide at x={}", other_bbox.min.x);
+                // println!("Vertical guide at x={}", other_bbox.min.x);
             }
             if self.is_close(dragged_bbox.max.x, other_bbox.max.x, 5.0) {
                 self.guide_lines.push(GuideLine {
@@ -235,7 +260,7 @@ impl Editor {
                         y: window_size.height as f32,
                     },
                 });
-                println!("Vertical guide at x={}", other_bbox.max.x);
+                // println!("Vertical guide at x={}", other_bbox.max.x);
             }
 
             // Check for horizontal alignment
@@ -250,7 +275,7 @@ impl Editor {
                         y: other_bbox.min.y,
                     },
                 });
-                println!("Horizontal guide at y={}", other_bbox.min.y);
+                // println!("Horizontal guide at y={}", other_bbox.min.y);
             }
             if self.is_close(dragged_bbox.max.y, other_bbox.max.y, 5.0) {
                 self.guide_lines.push(GuideLine {
@@ -263,7 +288,7 @@ impl Editor {
                         y: other_bbox.max.y,
                     },
                 });
-                println!("Horizontal guide at y={}", other_bbox.max.y);
+                // println!("Horizontal guide at y={}", other_bbox.max.y);
             }
         }
     }

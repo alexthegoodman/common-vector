@@ -49,3 +49,11 @@ pub fn rgb_to_wgpu(r: u8, g: u8, b: u8, a: f32) -> [f32; 4] {
         a.clamp(0.0, 1.0),
     ]
 }
+
+pub fn color_to_wgpu(c: f32) -> f32 {
+    c / 255.0
+}
+
+pub fn wgpu_to_hex(c: f32) -> f32 {
+    c * 255.0
+}

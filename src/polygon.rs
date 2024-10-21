@@ -1,3 +1,4 @@
+use uuid::Uuid;
 use wgpu::util::DeviceExt;
 
 use crate::{
@@ -60,76 +61,6 @@ use lyon_tessellation::{
     VertexBuffers,
 };
 
-// pub fn get_polygon_data(
-//     window_size: &WindowSize,
-//     device: &wgpu::Device,
-//     points: Vec<Point>,
-//     dimensions: (f32, f32),
-//     transform: &Transform,
-// ) -> (
-//     Vec<Vertex>,
-//     Vec<u32>,
-//     wgpu::Buffer,
-//     wgpu::Buffer,
-//     Vec<Point>,
-// ) {
-//     let mut geometry: VertexBuffers<Vertex, u32> = VertexBuffers::new();
-//     let mut tessellator = FillTessellator::new();
-
-//     // Convert normalized points to lyon Path
-//     let mut builder = LyonPath::builder();
-//     let first_point = points[0];
-//     builder.begin(LyonPoint::new(
-//         first_point.x * dimensions.0,
-//         first_point.y * dimensions.1,
-//     ));
-//     for point in points.iter().skip(1) {
-//         builder.line_to(LyonPoint::new(
-//             point.x * dimensions.0,
-//             point.y * dimensions.1,
-//         ));
-//     }
-//     builder.close();
-//     let path = builder.build();
-
-//     // Perform tessellation
-//     tessellator
-//         .tessellate_path(
-//             &path,
-//             &FillOptions::default(),
-//             &mut BuffersBuilder::new(&mut geometry, |vertex: FillVertex| {
-//                 let x = ((vertex.position().x + transform.position.x) / window_size.width as f32)
-//                     * 2.0
-//                     - 1.0;
-//                 let y = 1.0
-//                     - ((vertex.position().y + transform.position.y) / window_size.height as f32)
-//                         * 2.0;
-//                 Vertex::new(x, y, 2, [1.0, 1.0, 1.0, 1.0])
-//             }),
-//         )
-//         .unwrap();
-
-//     let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-//         label: Some("Vertex Buffer"),
-//         contents: bytemuck::cast_slice(&geometry.vertices),
-//         usage: wgpu::BufferUsages::VERTEX,
-//     });
-
-//     let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-//         label: Some("Index Buffer"),
-//         contents: bytemuck::cast_slice(&geometry.indices),
-//         usage: wgpu::BufferUsages::INDEX,
-//     });
-
-//     (
-//         geometry.vertices,
-//         geometry.indices,
-//         vertex_buffer,
-//         index_buffer,
-//         points,
-//     )
-// }
-
 pub fn get_polygon_data(
     window_size: &WindowSize,
     device: &wgpu::Device,
@@ -137,6 +68,7 @@ pub fn get_polygon_data(
     dimensions: (f32, f32),
     transform: &Transform,
     border_radius: f32,
+    fill: [f32; 4],
 ) -> (
     Vec<Vertex>,
     Vec<u32>,
@@ -162,7 +94,7 @@ pub fn get_polygon_data(
                 let y = 1.0
                     - ((vertex.position().y + transform.position.y) / window_size.height as f32)
                         * 2.0;
-                Vertex::new(x, y, 3, [1.0, 1.0, 1.0, 1.0])
+                Vertex::new(x, y, 3, fill)
             }),
         )
         .unwrap();
@@ -207,47 +139,6 @@ pub fn get_polygon_data(
 
 use lyon_tessellation::math::point;
 use lyon_tessellation::math::Vector;
-
-// fn create_rounded_polygon_path(
-//     normalized_points: Vec<Point>,
-//     dimensions: (f32, f32),
-//     border_radius: f32,
-// ) -> LyonPath {
-//     let mut builder = LyonPath::builder();
-//     let n = normalized_points.len();
-
-//     for i in 0..n {
-//         let p1 = normalized_points[i];
-//         let p2 = normalized_points[(i + 1) % n];
-//         let p0 = normalized_points[(i + n - 1) % n];
-
-//         let v1 = Vector::new(p1.x - p0.x, p1.y - p0.y);
-//         let v2 = Vector::new(p2.x - p1.x, p2.y - p1.y);
-
-//         let len1 = (v1.x * v1.x + v1.y * v1.y).sqrt();
-//         let len2 = (v2.x * v2.x + v2.y * v2.y).sqrt();
-
-//         let radius = border_radius.min(len1 / 2.0).min(len2 / 2.0);
-
-//         let offset1 = Vector::new(v1.x / len1 * radius, v1.y / len1 * radius);
-//         let offset2 = Vector::new(v2.x / len2 * radius, v2.y / len2 * radius);
-
-//         let p1_scaled = LyonPoint::new(p1.x * dimensions.0, p1.y * dimensions.1);
-
-//         if i == 0 {
-//             builder.begin(point(p1_scaled.x - offset1.x, p1_scaled.y - offset1.y));
-//         }
-
-//         builder.cubic_bezier_to(
-//             point(p1_scaled.x, p1_scaled.y),
-//             point(p1_scaled.x, p1_scaled.y),
-//             point(p1_scaled.x + offset2.x, p1_scaled.y + offset2.y),
-//         );
-//     }
-
-//     builder.close();
-//     builder.build()
-// }
 
 fn create_rounded_polygon_path(
     normalized_points: Vec<Point>,
@@ -316,6 +207,7 @@ impl Polygon {
         dimensions: (f32, f32),
         position: Point,
         border_radius: f32,
+        fill: [f32; 4],
     ) -> Self {
         let transform = Transform::new(position);
         let (vertices, indices, vertex_buffer, index_buffer) = get_polygon_data(
@@ -325,13 +217,17 @@ impl Polygon {
             dimensions,
             &transform,
             border_radius,
+            fill,
         );
+        let id = Uuid::new_v4();
 
         Polygon {
+            id,
             points,
             dimensions,
             transform,
             border_radius,
+            fill,
             vertices,
             indices,
             vertex_buffer,
@@ -351,6 +247,7 @@ impl Polygon {
             self.dimensions,
             &self.transform,
             self.border_radius,
+            self.fill,
         );
 
         self.vertices = vertices;
@@ -372,6 +269,7 @@ impl Polygon {
             self.dimensions,
             &self.transform,
             self.border_radius,
+            self.fill,
         );
 
         self.points = points;
@@ -394,6 +292,7 @@ impl Polygon {
             dimensions,
             &self.transform,
             self.border_radius,
+            self.fill,
         );
 
         self.dimensions = dimensions;
@@ -418,6 +317,7 @@ impl Polygon {
             self.dimensions,
             &self.transform,
             self.border_radius,
+            self.fill,
         );
 
         self.vertices = vertices;
@@ -439,9 +339,33 @@ impl Polygon {
             self.dimensions,
             &self.transform,
             border_radius,
+            self.fill,
         );
 
         self.border_radius = border_radius;
+        self.vertices = vertices;
+        self.indices = indices;
+        self.vertex_buffer = vertex_buffer;
+        self.index_buffer = index_buffer;
+    }
+
+    pub fn update_data_from_fill(
+        &mut self,
+        window_size: &WindowSize,
+        device: &wgpu::Device,
+        fill: [f32; 4],
+    ) {
+        let (vertices, indices, vertex_buffer, index_buffer) = get_polygon_data(
+            window_size,
+            device,
+            self.points.clone(),
+            self.dimensions,
+            &self.transform,
+            self.border_radius,
+            fill,
+        );
+
+        self.fill = fill;
         self.vertices = vertices;
         self.indices = indices;
         self.vertex_buffer = vertex_buffer;
@@ -528,8 +452,10 @@ impl Polygon {
 }
 
 pub struct Polygon {
+    pub id: Uuid,
     pub points: Vec<Point>,
     pub dimensions: (f32, f32), // (width, height) in pixels
+    pub fill: [f32; 4],
     pub transform: Transform,
     pub border_radius: f32,
     pub vertices: Vec<Vertex>,
@@ -540,6 +466,7 @@ pub struct Polygon {
 
 pub struct PolygonConfig {
     pub points: Vec<Point>,
+    pub fill: [f32; 4],
     pub dimensions: (f32, f32), // (width, height) in pixels
     pub position: Point,
     pub border_radius: f32,
