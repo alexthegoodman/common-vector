@@ -451,6 +451,94 @@ impl Polygon {
         }
     }
 
+    pub fn closest_edge(&self, point: Point) -> Option<usize> {
+        let world_points: Vec<Point> = self
+            .points
+            .iter()
+            .map(|p| Point {
+                x: p.x * self.dimensions.0 + self.transform.position.x,
+                y: p.y * self.dimensions.1 + self.transform.position.y,
+            })
+            .collect();
+
+        let mut closest_edge = None;
+        let mut min_distance = f32::MAX;
+
+        for i in 0..world_points.len() {
+            let start = world_points[i];
+            let end = world_points[(i + 1) % world_points.len()];
+
+            let distance = point_to_line_segment_distance(point, start, end);
+
+            if distance < min_distance {
+                min_distance = distance;
+                closest_edge = Some(i);
+            }
+        }
+
+        if min_distance <= 5.0 {
+            // Threshold for edge selection
+            closest_edge
+        } else {
+            None
+        }
+    }
+
+    pub fn move_edge(
+        &mut self,
+        edge_index: usize,
+        mouse_pos: Point,
+        window_size: &WindowSize,
+        device: &wgpu::Device,
+    ) {
+        let start_index = edge_index;
+        let end_index = (edge_index + 1) % self.points.len();
+
+        let start = self.points[start_index];
+        let end = self.points[end_index];
+
+        // Convert normalized points to world coordinates
+        let world_start = Point {
+            x: start.x * self.dimensions.0 + self.transform.position.x,
+            y: start.y * self.dimensions.1 + self.transform.position.y,
+        };
+        let world_end = Point {
+            x: end.x * self.dimensions.0 + self.transform.position.x,
+            y: end.y * self.dimensions.1 + self.transform.position.y,
+        };
+
+        // Calculate the movement vector in world coordinates
+        let edge_center = Point {
+            x: (world_start.x + world_end.x) / 2.0,
+            y: (world_start.y + world_end.y) / 2.0,
+        };
+        let dx = mouse_pos.x - edge_center.x;
+        let dy = mouse_pos.y - edge_center.y;
+
+        // Move both points of the edge in world coordinates
+        let new_world_start = Point {
+            x: world_start.x + dx,
+            y: world_start.y + dy,
+        };
+        let new_world_end = Point {
+            x: world_end.x + dx,
+            y: world_end.y + dy,
+        };
+
+        // Convert back to normalized coordinates
+        self.points[start_index] = Point {
+            x: (new_world_start.x - self.transform.position.x) / self.dimensions.0,
+            y: (new_world_start.y - self.transform.position.y) / self.dimensions.1,
+        };
+        self.points[end_index] = Point {
+            x: (new_world_end.x - self.transform.position.x) / self.dimensions.0,
+            y: (new_world_end.y - self.transform.position.y) / self.dimensions.1,
+        };
+
+        // Update the polygon data
+        self.update_data_from_points(window_size, device, self.points.clone());
+    }
+
     pub fn to_config(&self) -> PolygonConfig {
         PolygonConfig {
             id: self.id,
@@ -465,6 +553,27 @@ impl Polygon {
             border_radius: self.border_radius,
         }
     }
+}
+
+// Helper function to calculate the distance from a point to a line segment
+fn point_to_line_segment_distance(point: Point, start: Point, end: Point) -> f32 {
+    let dx = end.x - start.x;
+    let dy = end.y - start.y;
+    let length_squared = dx * dx + dy * dy;
+
+    if length_squared == 0.0 {
+        return distance(point, start);
+    }
+
+    let t = ((point.x - start.x) * dx + (point.y - start.y) * dy) / length_squared;
+    let t = t.max(0.0).min(1.0);
+
+    let projection = Point {
+        x: start.x + t * dx,
+        y: start.y + t * dy,
+    };
+
+    distance(point, projection)
 }
 
 pub struct Polygon {

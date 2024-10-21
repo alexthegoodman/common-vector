@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::fmt::Display;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use floem_renderer::gpu_resources::GpuResources;
@@ -16,10 +17,19 @@ use crate::{
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 
-#[derive(Eq, PartialEq, Clone, Copy, EnumIter)]
+#[derive(Eq, PartialEq, Clone, Copy, EnumIter, Debug)]
 pub enum ControlMode {
     Point,
     Edge,
+}
+
+impl Display for ControlMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ControlMode::Point => f.write_str("Point"),
+            ControlMode::Edge => f.write_str("Edge"),
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -57,7 +67,9 @@ pub type LayersUpdateHandler = dyn Fn() -> Option<Box<dyn FnMut(Vec<PolygonConfi
 pub struct Editor {
     pub polygons: Vec<Polygon>,
     pub hover_point: Option<EdgePoint>,
+    pub hover_edge: Option<(usize, usize)>, // (polygon_index, edge_index)
     pub dragging_point: Option<(usize, usize)>, // (polygon_index, point_index)
+    pub dragging_edge: Option<(usize, usize)>, // (polygon_index, edge_index)
     pub dragging_polygon: Option<usize>,
     pub guide_lines: Vec<GuideLine>,
     pub viewport: Arc<Mutex<Viewport>>,
@@ -79,7 +91,9 @@ impl Editor {
         Editor {
             polygons: Vec::new(),
             hover_point: None,
+            hover_edge: None,
             dragging_point: None,
+            dragging_edge: None,
             dragging_polygon: None,
             guide_lines: Vec::new(),
             viewport,
@@ -127,16 +141,28 @@ impl Editor {
         }
     }
 
-    pub fn handle_mouse_down(
-        &mut self,
-        // x: f32,
-        // y: f32,
-        window_size: &WindowSize,
-        device: &wgpu::Device,
-    ) {
+    pub fn handle_mouse_down(&mut self, window_size: &WindowSize, device: &wgpu::Device) {
         let x = self.last_x;
         let y = self.last_y;
         let mouse_pos = Point { x, y };
+
+        match self.control_mode {
+            ControlMode::Point => self.handle_mouse_down_point_mode(mouse_pos, window_size, device),
+            ControlMode::Edge => self.handle_mouse_down_edge_mode(mouse_pos, window_size, device),
+        }
+    }
+
+    pub fn handle_mouse_down_point_mode(
+        &mut self,
+        // x: f32,
+        // y: f32,
+        mouse_pos: Point,
+        window_size: &WindowSize,
+        device: &wgpu::Device,
+    ) {
+        // let x = self.last_x;
+        // let y = self.last_y;
+        // let mouse_pos = Point { x, y };
 
         if let Some(hover_point) = self.hover_point {
             for (poly_index, polygon) in self.polygons.iter_mut().enumerate() {
@@ -173,6 +199,8 @@ impl Editor {
             if polygon.contains_point(&mouse_pos) {
                 self.dragging_polygon = Some(poly_index);
                 self.drag_start = Some(mouse_pos);
+
+                // TODO: make DRY with below
                 if (self.handle_polygon_click.is_some()) {
                     let handler_creator = self
                         .handle_polygon_click
@@ -211,6 +239,49 @@ impl Editor {
         }
     }
 
+    fn handle_mouse_down_edge_mode(
+        &mut self,
+        mouse_pos: Point,
+        window_size: &WindowSize,
+        device: &wgpu::Device,
+    ) {
+        if let Some((poly_index, edge_index)) = self.hover_edge {
+            self.dragging_edge = Some((poly_index, edge_index));
+            return;
+        }
+
+        // If not hovering over an edge, check for polygon dragging (same as point mode)
+        for (poly_index, polygon) in self.polygons.iter().enumerate() {
+            if polygon.contains_point(&mouse_pos) {
+                self.dragging_polygon = Some(poly_index);
+                self.drag_start = Some(mouse_pos);
+
+                // hard to make DRY
+                if (self.handle_polygon_click.is_some()) {
+                    let handler_creator = self
+                        .handle_polygon_click
+                        .as_ref()
+                        .expect("Couldn't get handler");
+                    let mut handle_click = handler_creator().expect("Couldn't get handler");
+                    handle_click(
+                        polygon.id,
+                        PolygonConfig {
+                            id: polygon.id,
+                            name: polygon.name.clone(),
+                            points: polygon.points.clone(),
+                            dimensions: polygon.dimensions,
+                            position: polygon.transform.position,
+                            border_radius: polygon.border_radius,
+                            fill: polygon.fill,
+                        },
+                    );
+                }
+
+                return;
+            }
+        }
+    }
+
     pub fn handle_mouse_move(
         &mut self,
         window_size: &WindowSize,
@@ -219,11 +290,29 @@ impl Editor {
         y: f32,
     ) {
         let mouse_pos = Point { x, y };
+        self.last_x = x;
+        self.last_y = y;
+
+        match self.control_mode {
+            ControlMode::Point => self.handle_mouse_move_point_mode(mouse_pos, window_size, device),
+            ControlMode::Edge => self.handle_mouse_move_edge_mode(mouse_pos, window_size, device),
+        }
+    }
+
+    pub fn handle_mouse_move_point_mode(
+        &mut self,
+        mouse_pos: Point,
+        window_size: &WindowSize,
+        device: &wgpu::Device,
+        // x: f32,
+        // y: f32,
+    ) {
+        // let mouse_pos = Point { x, y };
         self.hover_point = None;
         self.guide_lines.clear();
 
-        self.last_x = x;
-        self.last_y = y;
+        // self.last_x = x;
+        // self.last_y = y;
 
         if let Some((poly_index, point_index)) = self.dragging_point {
             let polygon = &mut self.polygons[poly_index];
@@ -236,16 +325,7 @@ impl Editor {
             self.update_guide_lines(poly_index, window_size);
         } else if let Some(poly_index) = self.dragging_polygon {
             if let Some(start) = self.drag_start {
-                let dx = mouse_pos.x - start.x;
-                let dy = mouse_pos.y - start.y;
-                let polygon = &mut self.polygons[poly_index];
-                let new_position = Point {
-                    x: polygon.transform.position.x + dx,
-                    y: polygon.transform.position.y + dy,
-                };
-                polygon.update_data_from_position(window_size, device, new_position);
-                self.drag_start = Some(mouse_pos);
-                self.update_guide_lines(poly_index, window_size);
+                self.move_polygon(mouse_pos, start, poly_index, window_size, device);
             }
         } else {
             for polygon in &self.polygons {
@@ -257,10 +337,58 @@ impl Editor {
         }
     }
 
+    pub fn move_polygon(
+        &mut self,
+        mouse_pos: Point,
+        start: Point,
+        poly_index: usize,
+        window_size: &WindowSize,
+        device: &wgpu::Device,
+    ) {
+        let dx = mouse_pos.x - start.x;
+        let dy = mouse_pos.y - start.y;
+        let polygon = &mut self.polygons[poly_index];
+        let new_position = Point {
+            x: polygon.transform.position.x + dx,
+            y: polygon.transform.position.y + dy,
+        };
+        polygon.update_data_from_position(window_size, device, new_position);
+        self.drag_start = Some(mouse_pos);
+        self.update_guide_lines(poly_index, window_size);
+    }
+
+    fn handle_mouse_move_edge_mode(
+        &mut self,
+        mouse_pos: Point,
+        window_size: &WindowSize,
+        device: &wgpu::Device,
+    ) {
+        self.hover_edge = None;
+        self.guide_lines.clear();
+
+        if let Some((poly_index, edge_index)) = self.dragging_edge {
+            let polygon = &mut self.polygons[poly_index];
+            polygon.move_edge(edge_index, mouse_pos, window_size, device);
+            self.update_guide_lines(poly_index, window_size);
+        } else if let Some(poly_index) = self.dragging_polygon {
+            if let Some(start) = self.drag_start {
+                self.move_polygon(mouse_pos, start, poly_index, window_size, device);
+            }
+        } else {
+            for (poly_index, polygon) in self.polygons.iter().enumerate() {
+                if let Some(edge_index) = polygon.closest_edge(mouse_pos) {
+                    self.hover_edge = Some((poly_index, edge_index));
+                    break;
+                }
+            }
+        }
+    }
+
     pub fn handle_mouse_up(&mut self) {
         self.dragging_point = None;
         self.dragging_polygon = None;
         self.drag_start = None;
+        self.dragging_edge = None;
         self.guide_lines.clear();
     }
 
