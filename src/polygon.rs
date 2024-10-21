@@ -223,6 +223,7 @@ impl Polygon {
 
         Polygon {
             id,
+            name: "Polygon".to_string(),
             points,
             dimensions,
             transform,
@@ -449,10 +450,26 @@ impl Polygon {
             self.points[point_index] = new_position;
         }
     }
+
+    pub fn to_config(&self) -> PolygonConfig {
+        PolygonConfig {
+            id: self.id,
+            name: self.name.clone(),
+            points: self.points.clone(),
+            fill: self.fill,
+            dimensions: self.dimensions,
+            position: Point {
+                x: self.transform.position.x,
+                y: self.transform.position.y,
+            },
+            border_radius: self.border_radius,
+        }
+    }
 }
 
 pub struct Polygon {
     pub id: Uuid,
+    pub name: String,
     pub points: Vec<Point>,
     pub dimensions: (f32, f32), // (width, height) in pixels
     pub fill: [f32; 4],
@@ -465,6 +482,8 @@ pub struct Polygon {
 }
 
 pub struct PolygonConfig {
+    pub id: Uuid,
+    pub name: String,
     pub points: Vec<Point>,
     pub fill: [f32; 4],
     pub dimensions: (f32, f32), // (width, height) in pixels

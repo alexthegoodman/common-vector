@@ -13,6 +13,15 @@ use crate::{
     polygon::Polygon,
 };
 
+use strum::IntoEnumIterator;
+use strum_macros::EnumIter;
+
+#[derive(Eq, PartialEq, Clone, Copy, EnumIter)]
+pub enum ControlMode {
+    Point,
+    Edge,
+}
+
 #[derive(Clone, Copy)]
 pub struct Viewport {
     pub width: f32,
@@ -43,6 +52,7 @@ pub struct GuideLine {
 }
 
 type PolygonClickHandler = dyn Fn() -> Option<Box<dyn FnMut(Uuid, PolygonConfig)>>;
+pub type LayersUpdateHandler = dyn Fn() -> Option<Box<dyn FnMut(Vec<PolygonConfig>)>>;
 
 pub struct Editor {
     pub polygons: Vec<Polygon>,
@@ -58,6 +68,8 @@ pub struct Editor {
     // button_handler: RefCell<Option<Box<dyn Fn(MutexGuard<'_, Editor>) + Send + 'static>>>,
     pub handle_polygon_click: Option<Arc<PolygonClickHandler>>,
     pub gpu_resources: Option<Arc<GpuResources>>,
+    pub handle_layers_update: Option<Arc<LayersUpdateHandler>>,
+    pub control_mode: ControlMode,
 }
 
 use std::borrow::BorrowMut;
@@ -76,6 +88,32 @@ impl Editor {
             last_y: 0.0,
             handle_polygon_click: None,
             gpu_resources: None,
+            handle_layers_update: None,
+            control_mode: ControlMode::Point,
+        }
+    }
+
+    pub fn add_polygon(&mut self, polygon: Polygon) {
+        self.polygons.push(polygon);
+        self.run_layers_update();
+    }
+
+    pub fn run_layers_update(&self) {
+        if (self.handle_layers_update.is_some()) {
+            let handler_creator = self
+                .handle_layers_update
+                .as_ref()
+                .expect("Couldn't get handler");
+            let mut handle_update = handler_creator().expect("Couldn't get handler");
+
+            let polygon_configs: Vec<PolygonConfig> = self
+                .polygons
+                .iter()
+                .map(|polygon| polygon.to_config())
+                .collect();
+
+            // println!("Update layers... {:?}", polygon_configs.len());
+            handle_update(polygon_configs);
         }
     }
 
@@ -144,6 +182,8 @@ impl Editor {
                     handle_click(
                         polygon.id,
                         PolygonConfig {
+                            id: polygon.id,
+                            name: polygon.name.clone(),
                             points: polygon.points.clone(),
                             dimensions: polygon.dimensions,
                             position: polygon.transform.position,
@@ -296,20 +336,4 @@ impl Editor {
     fn is_close(&self, a: f32, b: f32, threshold: f32) -> bool {
         (a - b).abs() < threshold
     }
-
-    // fn draw(&self, renderer: &mut CmnRenderer, surface: &wgpu::Surface, device: &wgpu::Device) {
-    //     for polygon in &self.polygons {
-    //         polygon.draw(renderer, surface, &self.viewport, device);
-    //     }
-
-    //     if let Some(edge_point) = self.hover_point {
-    //         draw_dot(
-    //             surface,
-    //             renderer,
-    //             &self.viewport,
-    //             edge_point.point,
-    //             [0.0, 1.0, 0.0, 1.0],
-    //         ); // Green dot
-    //     }
-    // }
 }

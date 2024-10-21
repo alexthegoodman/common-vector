@@ -57,3 +57,31 @@ pub fn color_to_wgpu(c: f32) -> f32 {
 pub fn wgpu_to_hex(c: f32) -> f32 {
     c * 255.0
 }
+
+pub fn string_to_f32(s: &str) -> Result<f32, std::num::ParseFloatError> {
+    let trimmed = s.trim();
+
+    if trimmed.is_empty() {
+        return Ok(0.0);
+    }
+
+    // Check if there's at least one digit in the string
+    if !trimmed.chars().any(|c| c.is_ascii_digit()) {
+        return Ok(0.0);
+    }
+
+    // At this point, we know there's at least one digit, so let's try to parse
+    match trimmed.parse::<f32>() {
+        Ok(num) => Ok(num),
+        Err(e) => {
+            // If parsing failed, check if it's because of a misplaced dash
+            if trimmed.contains('-') && trimmed != "-" {
+                // Remove all dashes and try parsing again
+                let without_dashes = trimmed.replace('-', "");
+                without_dashes.parse::<f32>().map(|num| -num.abs())
+            } else {
+                Err(e)
+            }
+        }
+    }
+}
