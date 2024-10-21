@@ -3,7 +3,10 @@ use std::fmt::Display;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use floem_renderer::gpu_resources::GpuResources;
+use floem_winit::window::Window;
+use std::f32::consts::PI;
 use uuid::Uuid;
+use winit::window::CursorIcon;
 
 use crate::basic::Shape;
 use crate::polygon::PolygonConfig;
@@ -82,6 +85,7 @@ pub struct Editor {
     pub gpu_resources: Option<Arc<GpuResources>>,
     pub handle_layers_update: Option<Arc<LayersUpdateHandler>>,
     pub control_mode: ControlMode,
+    pub window: Option<Arc<Window>>,
 }
 
 use std::borrow::BorrowMut;
@@ -104,6 +108,7 @@ impl Editor {
             gpu_resources: None,
             handle_layers_update: None,
             control_mode: ControlMode::Point,
+            window: None,
         }
     }
 
@@ -131,6 +136,117 @@ impl Editor {
         }
     }
 
+    pub fn update_cursor(&self) {
+        let cursor = match self.control_mode {
+            ControlMode::Point => {
+                if self.dragging_point.is_some() {
+                    CursorIcon::Grabbing
+                } else if self.hover_point.is_some() {
+                    CursorIcon::Grab
+                } else {
+                    CursorIcon::Default
+                }
+            }
+            ControlMode::Edge => {
+                if let Some((poly_index, edge_index)) = self.dragging_edge.or(self.hover_edge) {
+                    let polygon = &self.polygons[poly_index];
+
+                    // Get start point in world coordinates
+                    let start_point = polygon.points[edge_index];
+                    let start = Point {
+                        x: start_point.x * polygon.dimensions.0 + polygon.transform.position.x,
+                        y: start_point.y * polygon.dimensions.1 + polygon.transform.position.y,
+                    };
+
+                    // Get end point in world coordinates
+                    let end_index = (edge_index + 1) % polygon.points.len();
+                    let end_point = polygon.points[end_index];
+                    let end = Point {
+                        x: end_point.x * polygon.dimensions.0 + polygon.transform.position.x,
+                        y: end_point.y * polygon.dimensions.1 + polygon.transform.position.y,
+                    };
+
+                    // Calculate angle in world coordinates
+                    let dx = end.x - start.x;
+                    // Flip dy for screen coordinates
+                    let dy = start.y - end.y; // Note the flip here: start.y - end.y instead of end.y - start.y
+
+                    // Use atan2 to get angle in radians
+                    let mut angle = dy.atan2(dx);
+
+                    // Normalize angle to 0-2PI range
+                    if angle < 0.0 {
+                        angle += 2.0 * PI;
+                    }
+
+                    // // Optional: Debug print
+                    // if self.debug_cursor_angles {
+                    //     println!("Edge angle: {:.2}° ({}rad)", angle * 180.0 / PI, angle);
+                    // }
+
+                    // Convert angle to degrees for easier understanding
+                    let degrees = angle * 180.0 / PI;
+
+                    // Determine cursor based on 8 primary directions
+                    let normalized_degrees = ((degrees % 180.0) + 180.0) % 180.0;
+
+                    if (normalized_degrees >= 0.0 && normalized_degrees <= 22.5)
+                        || (normalized_degrees >= 157.5 && normalized_degrees <= 180.0)
+                    {
+                        // CursorIcon::EwResize
+                        CursorIcon::NsResize
+                    } else if normalized_degrees >= 67.5 && normalized_degrees <= 112.5 {
+                        // CursorIcon::NsResize
+                        CursorIcon::EwResize
+                    } else if (normalized_degrees > 22.5 && normalized_degrees < 67.5) {
+                        if degrees <= 90.0 || degrees >= 270.0 {
+                            CursorIcon::NwseResize // Swapped from NeswResize
+                        } else {
+                            CursorIcon::NeswResize // Swapped from NwseResize
+                        }
+                    } else {
+                        if degrees <= 90.0 || degrees >= 270.0 {
+                            CursorIcon::NeswResize // Swapped from NwseResize
+                        } else {
+                            CursorIcon::NwseResize // Swapped from NeswResize
+                        }
+                    }
+                } else {
+                    CursorIcon::Default
+                }
+            }
+        };
+
+        let window = self.window.as_ref().expect("Couldn't get window");
+
+        window.set_cursor_icon(cursor);
+    }
+
+    // // Helper method to convert angle to cursor icon
+    // pub fn angle_to_cursor(angle_degrees: f32) -> CursorIcon {
+    //     let normalized_degrees = ((angle_degrees % 180.0) + 180.0) % 180.0;
+
+    //     if (normalized_degrees >= 0.0 && normalized_degrees <= 22.5)
+    //         || (normalized_degrees >= 157.5 && normalized_degrees <= 180.0)
+    //     {
+    //         CursorIcon::EwResize
+    //     } else if normalized_degrees >= 67.5 && normalized_degrees <= 112.5 {
+    //         CursorIcon::NsResize
+    //     } else if (normalized_degrees > 22.5 && normalized_degrees < 67.5) {
+    //         if angle_degrees <= 90.0 || angle_degrees >= 270.0 {
+    //             CursorIcon::NeswResize
+    //         } else {
+    //             CursorIcon::NwseResize
+    //         }
+    //     } else {
+    //         if angle_degrees <= 90.0 || angle_degrees >= 270.0 {
+    //             CursorIcon::NwseResize
+    //         } else {
+    //             CursorIcon::NeswResize
+    //         }
+    //     }
+    // }
+
     pub fn update_date_from_window_resize(
         &mut self,
         window_size: &WindowSize,
@@ -150,6 +266,8 @@ impl Editor {
             ControlMode::Point => self.handle_mouse_down_point_mode(mouse_pos, window_size, device),
             ControlMode::Edge => self.handle_mouse_down_edge_mode(mouse_pos, window_size, device),
         }
+
+        self.update_cursor();
     }
 
     pub fn handle_mouse_down_point_mode(
@@ -297,6 +415,8 @@ impl Editor {
             ControlMode::Point => self.handle_mouse_move_point_mode(mouse_pos, window_size, device),
             ControlMode::Edge => self.handle_mouse_move_edge_mode(mouse_pos, window_size, device),
         }
+
+        self.update_cursor();
     }
 
     pub fn handle_mouse_move_point_mode(
@@ -390,6 +510,7 @@ impl Editor {
         self.drag_start = None;
         self.dragging_edge = None;
         self.guide_lines.clear();
+        self.update_cursor();
     }
 
     fn update_guide_lines(&mut self, dragged_poly_index: usize, window_size: &WindowSize) {

@@ -331,6 +331,7 @@ name = "common-vector"
 version = "0.1.0"
 dependencies = [
  "bytemuck",
+ "floem-winit",
  "floem_renderer",
  "futures",
  "lyon_tessellation",
