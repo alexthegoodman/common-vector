@@ -139,13 +139,15 @@ impl Editor {
     pub fn update_cursor(&self) {
         let cursor = match self.control_mode {
             ControlMode::Point => {
-                if self.dragging_point.is_some() {
-                    CursorIcon::Grabbing
-                } else if self.hover_point.is_some() {
-                    CursorIcon::Grab
-                } else {
-                    CursorIcon::Default
-                }
+                // if self.dragging_point.is_some() {
+                //     CursorIcon::Grabbing
+                // } else if self.hover_point.is_some() {
+                //     CursorIcon::Grab
+                // } else {
+                //     CursorIcon::Default
+                // }
+                // I feel that the ring / dot is better, and Grab covers it up
+                CursorIcon::Default
             }
             ControlMode::Edge => {
                 if let Some((poly_index, edge_index)) = self.dragging_edge.or(self.hover_edge) {
@@ -190,27 +192,59 @@ impl Editor {
                     // Determine cursor based on 8 primary directions
                     let normalized_degrees = ((degrees % 180.0) + 180.0) % 180.0;
 
-                    if (normalized_degrees >= 0.0 && normalized_degrees <= 22.5)
+                    // if (normalized_degrees >= 0.0 && normalized_degrees <= 22.5)
+                    //     || (normalized_degrees >= 157.5 && normalized_degrees <= 180.0)
+                    // {
+                    //     // CursorIcon::EwResize
+                    //     CursorIcon::NsResize
+                    // } else if normalized_degrees >= 67.5 && normalized_degrees <= 112.5 {
+                    //     // CursorIcon::NsResize
+                    //     CursorIcon::EwResize
+                    // } else if (normalized_degrees > 22.5 && normalized_degrees < 67.5) {
+                    //     if degrees <= 90.0 || degrees >= 270.0 {
+                    //         CursorIcon::NwseResize // Swapped from NeswResize
+                    //     } else {
+                    //         CursorIcon::NeswResize // Swapped from NwseResize
+                    //     }
+                    // } else {
+                    //     if degrees <= 90.0 || degrees >= 270.0 {
+                    //         CursorIcon::NeswResize // Swapped from NwseResize
+                    //     } else {
+                    //         CursorIcon::NwseResize // Swapped from NeswResize
+                    //     }
+                    // }
+
+                    // Define diagonal variables based on the degrees
+                    let is_north_west = degrees > 270.0 && degrees < 360.0;
+                    let is_north_east = degrees > 0.0 && degrees < 90.0;
+                    let is_south_west = degrees > 180.0 && degrees < 270.0; // Opposite diagonal
+                    let is_south_east = degrees > 90.0 && degrees < 180.0; // Opposite diagonal
+
+                    // Cursor determination based on the angle ranges
+                    let cursor = if (normalized_degrees >= 0.0 && normalized_degrees <= 22.5)
                         || (normalized_degrees >= 157.5 && normalized_degrees <= 180.0)
                     {
+                        // Horizontal edge (0° or 180°)
                         // CursorIcon::EwResize
                         CursorIcon::NsResize
                     } else if normalized_degrees >= 67.5 && normalized_degrees <= 112.5 {
+                        // Vertical edge (90°)
                         // CursorIcon::NsResize
                         CursorIcon::EwResize
-                    } else if (normalized_degrees > 22.5 && normalized_degrees < 67.5) {
-                        if degrees <= 90.0 || degrees >= 270.0 {
-                            CursorIcon::NwseResize // Swapped from NeswResize
-                        } else {
-                            CursorIcon::NeswResize // Swapped from NwseResize
-                        }
                     } else {
-                        if degrees <= 90.0 || degrees >= 270.0 {
-                            CursorIcon::NeswResize // Swapped from NwseResize
+                        // Diagonal edge: choose based on diagonal direction
+                        if is_north_east || is_south_west {
+                            CursorIcon::NwseResize // North-West to South-East
+                                                   // CursorIcon::NeswResize
+                        } else if is_north_west || is_south_east {
+                            CursorIcon::NeswResize // North-East to South-West
+                                                   // CursorIcon::NwseResize
                         } else {
-                            CursorIcon::NwseResize // Swapped from NeswResize
+                            CursorIcon::Default
                         }
-                    }
+                    };
+
+                    cursor
                 } else {
                     CursorIcon::Default
                 }
