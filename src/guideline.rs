@@ -83,8 +83,10 @@ pub fn create_guide_line_buffers(
 }
 
 pub fn point_to_ndc(point: Point, window_size: &WindowSize) -> Point {
+    let aspect_ratio = window_size.width as f32 / window_size.height as f32;
+
     Point {
-        x: (point.x / window_size.width as f32) * 2.0 - 1.0,
+        x: ((point.x / window_size.width as f32) * 2.0 - 1.0),
         y: 1.0 - (point.y / window_size.height as f32) * 2.0,
     }
 }

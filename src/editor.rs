@@ -11,6 +11,7 @@ use winit::window::CursorIcon;
 
 use crate::basic::Shape;
 use crate::camera::{self, Camera, CameraBinding};
+use crate::guideline::point_to_ndc;
 use crate::polygon::PolygonConfig;
 use crate::{
     basic::Point,
@@ -121,6 +122,7 @@ pub struct Editor {
     pub last_mouse_pos: Option<Point>,
     pub camera_binding: Option<CameraBinding>,
     pub ds_ndc_pos: Point, // double-width sized ndc-style positioning (screen-oriented)
+    pub ndc: Point,
 }
 
 use std::borrow::BorrowMut;
@@ -157,6 +159,7 @@ impl Editor {
             last_world: Point { x: 0.0, y: 0.0 },
             ds_ndc_pos: Point { x: 0.0, y: 0.0 },
             last_top_left: Point { x: 0.0, y: 0.0 },
+            ndc: Point { x: 0.0, y: 0.0 },
         }
     }
 
@@ -509,9 +512,9 @@ impl Editor {
 
         // If not hovering over an edge, check for polygon dragging (same as point mode)
         for (poly_index, polygon) in self.polygons.iter().enumerate() {
-            if polygon.contains_point(&mouse_pos, camera) {
+            if polygon.contains_point(&self.last_top_left, camera) {
                 self.dragging_polygon = Some(poly_index);
-                self.drag_start = Some(mouse_pos);
+                self.drag_start = Some(self.last_top_left);
 
                 // hard to make DRY
                 if (self.handle_polygon_click.is_some()) {
@@ -548,16 +551,19 @@ impl Editor {
     ) {
         let camera = self.camera.as_mut().expect("Couldn't get camera");
         let mouse_pos = Point { x, y };
-        let ds_ndc_pos = visualize_ray_intersection(window_size, x, y, &camera);
-        let ds_ndc_pos = ds_ndc_pos.origin;
+        let ds_ndc = visualize_ray_intersection(window_size, x, y, &camera);
+        let ds_ndc_pos = ds_ndc.origin;
         let ds_ndc_pos = Point {
             x: ds_ndc_pos.x,
             y: ds_ndc_pos.y,
         };
-        let top_left = camera.ds_ndc_to_top_left(ds_ndc_pos);
-        println!("top_left {:?} {:?}", top_left, mouse_pos);
+        // let top_left = camera.ds_ndc_to_top_left(ds_ndc_pos);
+        // let top_left = camera.ndc_to_top_left(ds_ndc.ndc);
+        let top_left = ds_ndc.top_left;
+        // println!("top_left {:?} {:?}", top_left, mouse_pos);
         self.last_top_left = top_left;
         self.ds_ndc_pos = ds_ndc_pos;
+        self.ndc = ds_ndc.ndc;
 
         self.last_screen = Point { x, y };
         self.last_world = camera.screen_to_world(mouse_pos);
@@ -663,11 +669,12 @@ impl Editor {
         device: &wgpu::Device,
     ) {
         let camera = self.camera.as_ref().expect("Couldn't get camera");
+        let aspect_ratio = camera.window_size.width as f32 / camera.window_size.height as f32;
         let dx = mouse_pos.x - start.x;
         let dy = mouse_pos.y - start.y;
         let polygon = &mut self.polygons[poly_index];
         let new_position = Point {
-            x: polygon.transform.position.x + dx,
+            x: polygon.transform.position.x + (dx * 0.9), // not sure relation with aspect_ratio?
             y: polygon.transform.position.y + dy,
         };
         println!("move_polygon {:?}", new_position);
@@ -690,15 +697,15 @@ impl Editor {
 
         if let Some((poly_index, edge_index)) = self.dragging_edge {
             let polygon = &mut self.polygons[poly_index];
-            polygon.move_edge(edge_index, mouse_pos, window_size, device, &camera);
+            polygon.move_edge(edge_index, self.last_top_left, window_size, device, &camera);
             self.update_guide_lines(poly_index, window_size);
         } else if let Some(poly_index) = self.dragging_polygon {
             if let Some(start) = self.drag_start {
-                self.move_polygon(mouse_pos, start, poly_index, window_size, device);
+                self.move_polygon(self.last_top_left, start, poly_index, window_size, device);
             }
         } else {
             for (poly_index, polygon) in self.polygons.iter().enumerate() {
-                if let Some(edge_index) = polygon.closest_edge(mouse_pos) {
+                if let Some(edge_index) = polygon.closest_edge(self.last_top_left) {
                     self.hover_edge = Some((poly_index, edge_index));
                     break;
                 }
@@ -796,6 +803,8 @@ use cgmath::InnerSpace;
 pub struct Ray {
     pub origin: Point3<f32>,
     pub direction: Vector3<f32>,
+    pub ndc: Point,
+    pub top_left: Point,
 }
 
 impl Ray {
@@ -803,6 +812,8 @@ impl Ray {
         Ray {
             origin,
             direction: direction.normalize(),
+            ndc: Point { x: 0.0, y: 0.0 },
+            top_left: Point { x: 0.0, y: 0.0 },
         }
     }
 }
@@ -925,23 +936,24 @@ pub fn visualize_ray_intersection(
     screen_y: f32,
     camera: &Camera,
 ) -> Ray {
-    // Create projection and view matrices (assuming Camera struct has these)
-    let projection = camera.get_projection();
-    let view = camera.get_view();
+    let aspect_ratio = window_size.width as f32 / window_size.height as f32;
 
-    // Get matrices
-    // Convert to NDC
-    // let ndc_x = (2.0 * screen_x) / camera.window_size.width as f32 - 1.0;
-    // let ndc_y = 1.0 - (2.0 * screen_y) / camera.window_size.height as f32;
     let ndc_x = screen_x / camera.window_size.width as f32;
     let ndc_y = (screen_y / camera.window_size.height as f32);
 
     // Convert 2D position to 3D (keeping Z at 0 for 2D plane)
-    // let view_pos = Vector3::new(camera.position.x, camera.position.y, 0.0);
+    // let camera_pos_ndc = point_to_ndc(
+    //     Point {
+    //         x: camera.position.x,
+    //         y: camera.position.y,
+    //     },
+    //     window_size,
+    // );
+    // let camera_pos_ndc = camera.ndc_to_normalized(camera_pos_ndc.x, camera_pos_ndc.y);
     let view_pos = Vector3::new(0.0, 0.0, 0.0); // investigate why moves when this all 0
     let model_view = Matrix4::from_translation(view_pos);
 
-    let plane_size_normal = Vector3::new(1.0, 1.0, 0.0);
+    let plane_size_normal = Vector3::new((1.0 * aspect_ratio) / 2.0, (1.0 * 2.0) / 2.0, 0.0);
 
     // Transform NDC point to view space
     let view_point_normal = Point3::new(
@@ -954,21 +966,18 @@ pub fn visualize_ray_intersection(
         .unwrap()
         .transform_point(view_point_normal);
 
-    // println!("normals {:?}", world_point_normal);
+    println!("normal {:?}", world_point_normal);
 
     // Create a plane in view space
-    // In create_raycast
     let plane_center = Point3::new(
         -(camera.window_size.width as f32),
         -(camera.window_size.height as f32),
         0.0,
     );
 
-    let aspect_ratio = window_size.width as f32 / window_size.height as f32;
-
     // let plane_center = Point3::new(0.0, 0.0, 0.0);
     let plane_size = Vector3::new(
-        (camera.window_size.width as f32) * aspect_ratio, // aspect ratio? but definitely needed
+        (camera.window_size.width as f32) * aspect_ratio, // definitely needed aspect_ratio
         (camera.window_size.height as f32) * 2.0,
         0.0,
     );
@@ -983,21 +992,32 @@ pub fn visualize_ray_intersection(
     // Transform to world space
     let world_point = model_view.invert().unwrap().transform_point(view_point);
 
-    let ndc = camera.world_to_ndc(world_point);
-    let ndc_3d = Point3::new(ndc.0, ndc.1, 0.0);
-
     // Create ray from camera position to point (in 3D space)
     let camera_pos_3d = Point3::new(camera.position.x, camera.position.y, 0.0);
     let direction = (world_point - camera_pos_3d).normalize();
 
-    // println!("raycast {:?} {:?} {:?}", ndc, world_point, camera.position,);
+    let origin = Point3 {
+        x: world_point.x + camera.position.x + 140.0,
+        y: -(world_point.y) + camera.position.y,
+        z: world_point.z,
+    };
+
+    let ndc = camera.normalized_to_ndc(world_point_normal.x, world_point_normal.y);
+
+    let top_left = Point {
+        x: (world_point_normal.x * window_size.width as f32) + (camera.position.x * 0.5) + 70.0, // maybe account for camera position
+        y: (world_point_normal.y * window_size.height as f32) - (camera.position.y * 0.5),
+    };
+
+    // println!(
+    //     "is top_left way higher than middle? {:?} {:?} {:?}",
+    //     top_left, screen_x, screen_y
+    // );
 
     Ray {
         direction,
-        origin: Point3 {
-            x: world_point.x + camera.position.x + 160.0,
-            y: -(world_point.y) + camera.position.y,
-            z: world_point.z,
-        },
+        origin,
+        ndc: Point { x: ndc.0, y: ndc.1 },
+        top_left,
     }
 }

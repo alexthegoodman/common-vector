@@ -307,7 +307,7 @@ impl Polygon {
 
     pub fn to_local_space(&self, world_point: Point, camera: &Camera) -> Point {
         let untranslated = Point {
-            x: world_point.x - (self.transform.position.x * 1.05), // the modifier seems to improve accuracy a lot
+            x: world_point.x - (self.transform.position.x),
             y: world_point.y - self.transform.position.y,
         };
 

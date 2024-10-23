@@ -48,15 +48,60 @@ impl Camera {
         }
     }
 
+    // pub fn ds_ndc_to_top_left(&self, ds_ndc_pos: Point) -> Point {
+    //     let aspect_ratio = self.window_size.width as f32 / self.window_size.height as f32;
+
+    //     // reverses what is done in visualize_ray_intersection
+
+    //     Point {
+    //         x: ((ds_ndc_pos.x / aspect_ratio)
+    //             + (self.window_size.width as f32 / aspect_ratio) as f32)
+    //             - 90.0,
+    //         y: ((-ds_ndc_pos.y / 2.0) + (self.window_size.height as f32 / 2.0) as f32) - 0.0,
+    //     }
+    // }
+
     pub fn ds_ndc_to_top_left(&self, ds_ndc_pos: Point) -> Point {
         let aspect_ratio = self.window_size.width as f32 / self.window_size.height as f32;
+        let pos_x = ds_ndc_pos.x / self.window_size.width as f32;
+        let pos_y = ds_ndc_pos.y / self.window_size.height as f32;
 
-        Point {
-            x: ((ds_ndc_pos.x / aspect_ratio)
-                + (self.window_size.width as f32 / aspect_ratio) as f32)
-                - 90.0,
-            y: ((-ds_ndc_pos.y / 2.0) + (self.window_size.height as f32 / 2.0) as f32) - 0.0,
-        }
+        let (x, y) = self.ndc_to_normalized(pos_x, pos_y);
+
+        let x = (x * self.window_size.width as f32) + 65.0;
+        let y = y * self.window_size.height as f32;
+
+        Point { x, y }
+    }
+
+    pub fn ndc_to_top_left(&self, ds_ndc_pos: Point) -> Point {
+        let aspect_ratio = self.window_size.width as f32 / self.window_size.height as f32;
+
+        let (x, y) = self.ndc_to_normalized(ds_ndc_pos.x, ds_ndc_pos.y);
+
+        let x = (x * self.window_size.width as f32);
+        let y = y * self.window_size.height as f32;
+
+        Point { x, y }
+    }
+
+    pub fn ndc_to_normalized(&self, ndc_x: f32, ndc_y: f32) -> (f32, f32) {
+        // Convert from [-1, 1] to [0, 1]
+        let norm_x = (ndc_x + 1.0) / 2.0;
+        // Flip Y and convert from [-1, 1] to [0, 1]
+        let norm_y = (-ndc_y + 1.0) / 2.0;
+
+        (norm_x, norm_y)
+    }
+
+    // And its inverse if you need it
+    pub fn normalized_to_ndc(&self, norm_x: f32, norm_y: f32) -> (f32, f32) {
+        // Convert from [0, 1] to [-1, 1]
+        let ndc_x = (norm_x * 2.0) - 1.0;
+        // Convert from [0, 1] to [-1, 1] and flip Y
+        let ndc_y = -((norm_y * 2.0) - 1.0);
+
+        (ndc_x, ndc_y)
     }
 
     // Reverse conversion (world to NDC)
