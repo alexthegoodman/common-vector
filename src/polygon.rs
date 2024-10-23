@@ -1,12 +1,15 @@
+use cgmath::{Matrix4, Point3, Vector3};
 use uuid::Uuid;
 use wgpu::util::DeviceExt;
 
 use crate::{
-    basic::WindowSize,
-    basic::{BoundingBox, Point, Shape},
-    dot::{closest_point_on_line_segment, distance, EdgePoint},
-    editor::size_to_ndc,
-    transform::Transform,
+    basic::{BoundingBox, Point, Shape, WindowSize},
+    camera::{self, Camera},
+    dot::{
+        closest_point_on_line_segment, closest_point_on_line_segment_with_info, distance, EdgePoint,
+    },
+    editor::{size_to_ndc, visualize_ray_intersection},
+    transform::{self, Transform as SnTransform},
     vertex::Vertex,
 };
 
@@ -30,12 +33,13 @@ impl Shape for Polygon {
         }
     }
 
-    fn contains_point(&self, point: &Point) -> bool {
-        // Convert the point to the polygon's local coordinate system
-        let local_point = Point {
-            x: (point.x - self.transform.position.x) / self.dimensions.0,
-            y: (point.y - self.transform.position.y) / self.dimensions.1,
-        };
+    fn contains_point(&self, point: &Point, camera: &Camera) -> bool {
+        // // Convert the point to the polygon's local coordinate system
+        // let local_point = Point {
+        //     x: (point.x - self.transform.position.x) / self.dimensions.0,
+        //     y: (point.y - self.transform.position.y) / self.dimensions.1,
+        // };
+        let local_point = self.to_local_space(*point, camera);
 
         // Implement point-in-polygon test using the ray casting algorithm
         let mut inside = false;
@@ -51,6 +55,9 @@ impl Shape for Polygon {
             }
             j = i;
         }
+
+        // println!("inside {:?} {:?} {:?}", self.points, inside, local_point);
+
         inside
     }
 }
@@ -64,9 +71,10 @@ use lyon_tessellation::{
 pub fn get_polygon_data(
     window_size: &WindowSize,
     device: &wgpu::Device,
+    camera: &Camera,
     points: Vec<Point>,
     dimensions: (f32, f32),
-    transform: &Transform,
+    transform: &SnTransform,
     border_radius: f32,
     fill: [f32; 4],
 ) -> (
@@ -82,6 +90,8 @@ pub fn get_polygon_data(
 
     let path = create_rounded_polygon_path(points, dimensions, border_radius);
 
+    println!("get_polygon_data");
+
     // Fill the polygon
     fill_tessellator
         .tessellate_path(
@@ -94,10 +104,13 @@ pub fn get_polygon_data(
                 let y = 1.0
                     - ((vertex.position().y + transform.position.y) / window_size.height as f32)
                         * 2.0;
+
                 Vertex::new(x, y, 3, fill)
             }),
         )
         .unwrap();
+
+    // println!("get_polygon_data {:?}", geometry.vertices);
 
     // Stroke the polygon (optional, for a border effect)
     stroke_tessellator
@@ -199,20 +212,76 @@ fn create_rounded_polygon_path(
     builder.build()
 }
 
+// fn create_rounded_polygon_path(
+//     normalized_points: Vec<Point>,
+//     dimensions: (f32, f32),
+//     border_radius: f32,
+// ) -> LyonPath {
+//     let mut builder = LyonPath::builder();
+//     let n = normalized_points.len();
+
+//     // Calculate radius in normalized space
+//     // If you want border_radius in pixels, divide by the relevant dimension
+//     let scaled_radius = border_radius / dimensions.0.min(dimensions.1);
+
+//     for i in 0..n {
+//         let p0 = normalized_points[(i + n - 1) % n];
+//         let p1 = normalized_points[i];
+//         let p2 = normalized_points[(i + 1) % n];
+
+//         let v1 = Vector::new(p1.x - p0.x, p1.y - p0.y);
+//         let v2 = Vector::new(p2.x - p1.x, p2.y - p1.y);
+
+//         let len1 = (v1.x * v1.x + v1.y * v1.y).sqrt();
+//         let len2 = (v2.x * v2.x + v2.y * v2.y).sqrt();
+
+//         // Scale the radius to match the shape's dimensions while keeping points normalized
+//         let radius = (scaled_radius).min(len1 / 2.0).min(len2 / 2.0);
+
+//         let offset1 = Vector::new(v1.x / len1 * radius, v1.y / len1 * radius);
+//         let offset2 = Vector::new(v2.x / len2 * radius, v2.y / len2 * radius);
+
+//         let p1_point = LyonPoint::new(p1.x, p1.y);
+
+//         let corner_start = point(p1_point.x - offset1.x, p1_point.y - offset1.y);
+//         let corner_end = point(p1_point.x + offset2.x, p1_point.y + offset2.y);
+
+//         if i == 0 {
+//             builder.begin(corner_start);
+//         }
+
+//         // Add control points for the curve
+//         // Scale these relative to the radius to maintain curve shape
+//         let control1 = point(p1_point.x, p1_point.y);
+//         let control2 = point(p1_point.x, p1_point.y);
+
+//         builder.cubic_bezier_to(control1, control2, corner_end);
+//     }
+
+//     builder.close();
+//     builder.build()
+// }
+
+use cgmath::SquareMatrix;
+use cgmath::Transform;
+
 impl Polygon {
     pub fn new(
         window_size: &WindowSize,
         device: &wgpu::Device,
+        camera: &Camera,
         points: Vec<Point>,
         dimensions: (f32, f32),
         position: Point,
         border_radius: f32,
         fill: [f32; 4],
+        name: String,
     ) -> Self {
-        let transform = Transform::new(position);
+        let transform = SnTransform::new(position);
         let (vertices, indices, vertex_buffer, index_buffer) = get_polygon_data(
             window_size,
             device,
+            camera,
             points.clone(),
             dimensions,
             &transform,
@@ -223,7 +292,7 @@ impl Polygon {
 
         Polygon {
             id,
-            name: "Polygon".to_string(),
+            name,
             points,
             dimensions,
             transform,
@@ -236,14 +305,61 @@ impl Polygon {
         }
     }
 
+    pub fn to_local_space(&self, world_point: Point, camera: &Camera) -> Point {
+        let untranslated = Point {
+            x: world_point.x - (self.transform.position.x * 1.05), // the modifier seems to improve accuracy a lot
+            y: world_point.y - self.transform.position.y,
+        };
+
+        let local_point = Point {
+            x: untranslated.x / (self.dimensions.0),
+            y: untranslated.y / (self.dimensions.1),
+        };
+
+        // println!("local_point {:?} {:?}", self.name, local_point);
+
+        local_point
+    }
+
+    // pub fn to_local_space(&self, world_point: Point, camera: &Camera) -> Point {
+    //     // Create model matrix for the polygon's transform
+    //     let model = Matrix4::from_translation(Vector3::new(
+    //         self.transform.position.x,
+    //         self.transform.position.y,
+    //         0.0,
+    //     )) * Matrix4::from_nonuniform_scale(
+    //         // Scale by dimensions
+    //         self.dimensions.0,
+    //         self.dimensions.1,
+    //         1.0,
+    //     );
+
+    //     // Get inverse model matrix
+    //     let inv_model = model.invert().unwrap();
+
+    //     // Convert 2D world point to 3D
+    //     let world_point_3d = Point3::new(world_point.x, world_point.y, 0.0);
+
+    //     // Transform to local space
+    //     let local_point_3d = inv_model.transform_point(world_point_3d);
+
+    //     // Convert back to 2D
+    //     Point {
+    //         x: local_point_3d.x,
+    //         y: local_point_3d.y,
+    //     }
+    // }
+
     pub fn update_data_from_window_size(
         &mut self,
         window_size: &WindowSize,
         device: &wgpu::Device,
+        camera: &Camera,
     ) {
         let (vertices, indices, vertex_buffer, index_buffer) = get_polygon_data(
             window_size,
             device,
+            camera,
             self.points.clone(),
             self.dimensions,
             &self.transform,
@@ -262,10 +378,12 @@ impl Polygon {
         window_size: &WindowSize,
         device: &wgpu::Device,
         points: Vec<Point>,
+        camera: &Camera,
     ) {
         let (vertices, indices, vertex_buffer, index_buffer) = get_polygon_data(
             window_size,
             device,
+            camera,
             points.clone(),
             self.dimensions,
             &self.transform,
@@ -285,10 +403,12 @@ impl Polygon {
         window_size: &WindowSize,
         device: &wgpu::Device,
         dimensions: (f32, f32),
+        camera: &Camera,
     ) {
         let (vertices, indices, vertex_buffer, index_buffer) = get_polygon_data(
             window_size,
             device,
+            camera,
             self.points.clone(),
             dimensions,
             &self.transform,
@@ -308,12 +428,14 @@ impl Polygon {
         window_size: &WindowSize,
         device: &wgpu::Device,
         position: Point,
+        camera: &Camera,
     ) {
         self.transform.position = position;
 
         let (vertices, indices, vertex_buffer, index_buffer) = get_polygon_data(
             window_size,
             device,
+            camera,
             self.points.clone(),
             self.dimensions,
             &self.transform,
@@ -332,10 +454,12 @@ impl Polygon {
         window_size: &WindowSize,
         device: &wgpu::Device,
         border_radius: f32,
+        camera: &Camera,
     ) {
         let (vertices, indices, vertex_buffer, index_buffer) = get_polygon_data(
             window_size,
             device,
+            camera,
             self.points.clone(),
             self.dimensions,
             &self.transform,
@@ -355,10 +479,12 @@ impl Polygon {
         window_size: &WindowSize,
         device: &wgpu::Device,
         fill: [f32; 4],
+        camera: &Camera,
     ) {
         let (vertices, indices, vertex_buffer, index_buffer) = get_polygon_data(
             window_size,
             device,
+            camera,
             self.points.clone(),
             self.dimensions,
             &self.transform,
@@ -394,15 +520,16 @@ impl Polygon {
         }
     }
 
-    pub fn closest_point_on_edge(&self, mouse_pos: Point) -> Option<EdgePoint> {
+    pub fn closest_point_on_edge(&self, world_pos: Point, camera: &Camera) -> Option<EdgePoint> {
         let mut closest_point = None;
         let mut min_distance = f32::MAX;
 
-        // Convert mouse_pos to normalized coordinates
-        let normalized_mouse_pos = Point {
-            x: (mouse_pos.x - self.transform.position.x) / self.dimensions.0,
-            y: (mouse_pos.y - self.transform.position.y) / self.dimensions.1,
-        };
+        // cant normalize the ds_ndc as it is -1 to 1, but can normalize with world_pos or screen_pos
+        // let screen_pos = Point {
+        //     x: screen_pos.x,
+        //     y: screen_pos.y,
+        // };
+        let normalized_mouse_pos = self.to_local_space(world_pos, camera);
 
         for i in 0..self.points.len() {
             let start = self.points[i];
@@ -411,12 +538,30 @@ impl Polygon {
             let point = closest_point_on_line_segment(start, end, normalized_mouse_pos);
             let distance = distance(point, normalized_mouse_pos);
 
+            // let point = Point {
+            //     x: point.x, // dont use transform_pos here, positioning is fine
+            //     y: point.y,
+            // };
+
+            // let ray = visualize_ray_intersection(&camera.window_size, point.x, point.y, camera);
+
+            // let point = Point {
+            //     x: ray.origin.x,
+            //     y: ray.origin.y,
+            // };
+
+            // println!("point {:?}", point);
+
             if distance < min_distance {
+                // println!("MATCH");
                 min_distance = distance;
                 closest_point = Some(EdgePoint {
+                    // gpu should handle rendering back to screen coordinates
                     point: Point {
                         x: point.x * self.dimensions.0 + self.transform.position.x,
+                        // + camera.position.x,
                         y: point.y * self.dimensions.1 + self.transform.position.y,
+                        // + camera.position.y,
                     },
                     edge_index: i,
                 });
@@ -425,6 +570,10 @@ impl Polygon {
 
         // Convert the distance threshold to normalized space
         let normalized_threshold = 5.0 / self.dimensions.0.min(self.dimensions.1);
+        // let normalized_threshold = (5.0 / camera.zoom) / self.dimensions.0.min(self.dimensions.1);
+        // let normalized_threshold = 20.0;
+
+        // println!("min_distance {:?} {:?}", min_distance, normalized_threshold);
 
         if min_distance < normalized_threshold {
             closest_point
@@ -433,16 +582,76 @@ impl Polygon {
         }
     }
 
+    // pub fn closest_point_on_edge(&self, world_pos: Point, camera: &Camera) -> Option<EdgePoint> {
+    //     let mut closest_info = None;
+    //     let mut min_distance = f32::MAX;
+
+    //     // let normalized_mouse_pos = self.to_local_space(world_pos, camera);
+
+    //     for i in 0..self.points.len() {
+    //         let start = self.points[i];
+    //         let end = self.points[(i + 1) % self.points.len()];
+
+    //         let adjsuted_start = Point {
+    //             x: start.x * self.dimensions.0 + self.transform.position.x,
+    //             y: end.y * self.dimensions.1 + self.transform.position.y,
+    //         };
+
+    //         let adjsuted_end = Point {
+    //             x: end.x * self.dimensions.0 + self.transform.position.x,
+    //             y: end.y * self.dimensions.1 + self.transform.position.y,
+    //         };
+
+    //         let info =
+    //             closest_point_on_line_segment_with_info(adjsuted_start, adjsuted_end, world_pos);
+
+    //         if info.distance < min_distance {
+    //             min_distance = info.distance;
+    //             closest_info = Some((info, i));
+    //         }
+    //     }
+
+    //     if let Some((info, edge_index)) = closest_info {
+    //         // Convert the distance threshold to normalized space
+    //         let normalized_threshold = 20.0 / self.dimensions.0.min(self.dimensions.1);
+    //         let normalized_threshold = 100.0;
+
+    //         if info.distance < normalized_threshold {
+    //             println!(
+    //                 "new ring {:?} {:?} {:?}",
+    //                 info.point, min_distance, normalized_threshold
+    //             );
+
+    //             Some(EdgePoint {
+    //                 // point: Point {
+    //                 //     x: info.point.x * self.dimensions.0 + self.transform.position.x,
+    //                 //     y: info.point.y * self.dimensions.1 + self.transform.position.y,
+    //                 // },
+    //                 point: Point {
+    //                     x: info.point.x,
+    //                     y: info.point.y,
+    //                 },
+    //                 edge_index,
+    //             })
+    //         } else {
+    //             None
+    //         }
+    //     } else {
+    //         None
+    //     }
+    // }
+
     pub fn add_point(
         &mut self,
         new_point: Point,
         edge_index: usize,
         window_size: &WindowSize,
         device: &wgpu::Device,
+        camera: &Camera,
     ) {
         println!("Add point");
         self.points.insert(edge_index + 1, new_point);
-        self.update_data_from_points(window_size, device, self.points.clone());
+        self.update_data_from_points(window_size, device, self.points.clone(), camera);
     }
 
     pub fn move_point(&mut self, point_index: usize, new_position: Point) {
@@ -490,6 +699,7 @@ impl Polygon {
         mouse_pos: Point,
         window_size: &WindowSize,
         device: &wgpu::Device,
+        camera: &Camera,
     ) {
         let start_index = edge_index;
         let end_index = (edge_index + 1) % self.points.len();
@@ -536,7 +746,7 @@ impl Polygon {
         };
 
         // Update the polygon data
-        self.update_data_from_points(window_size, device, self.points.clone());
+        self.update_data_from_points(window_size, device, self.points.clone(), camera);
     }
 
     pub fn to_config(&self) -> PolygonConfig {
@@ -582,7 +792,7 @@ pub struct Polygon {
     pub points: Vec<Point>,
     pub dimensions: (f32, f32), // (width, height) in pixels
     pub fill: [f32; 4],
-    pub transform: Transform,
+    pub transform: SnTransform,
     pub border_radius: f32,
     pub vertices: Vec<Vertex>,
     pub indices: Vec<u32>,

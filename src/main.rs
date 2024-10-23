@@ -26,6 +26,7 @@ pub mod path;
 pub mod polygon;
 pub mod transform;
 pub mod vertex;
+pub mod camera;
 
 // Styling information
 // struct Style {

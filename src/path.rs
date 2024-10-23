@@ -2,8 +2,8 @@ use std::collections::HashMap;
 use wgpu::util::DeviceExt;
 
 use crate::{
-    basic::WindowSize,
-    basic::{BoundingBox, Point, PointKey, Shape},
+    basic::{BoundingBox, Point, PointKey, Shape, WindowSize},
+    camera::{self, Camera},
     editor::size_to_ndc,
     vertex::Vertex,
 };
@@ -42,7 +42,7 @@ impl Shape for Path {
         }
     }
 
-    fn contains_point(&self, point: &Point) -> bool {
+    fn contains_point(&self, point: &Point, camera: &Camera) -> bool {
         // Implement point-in-path test
         // This is a complex operation and may require a separate function
         // For now, we'll return a placeholder value

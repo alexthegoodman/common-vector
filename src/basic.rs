@@ -1,3 +1,5 @@
+use crate::camera::Camera;
+
 #[derive(Debug, Clone, Copy)]
 pub struct WindowSize {
     pub width: u32,
@@ -5,7 +7,7 @@ pub struct WindowSize {
 }
 
 // Basic 2D point structure
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct Point {
     pub x: f32,
     pub y: f32,
@@ -20,7 +22,7 @@ pub struct BoundingBox {
 // Basic shape traits
 pub trait Shape {
     fn bounding_box(&self) -> BoundingBox;
-    fn contains_point(&self, point: &Point) -> bool;
+    fn contains_point(&self, point: &Point, camera: &Camera) -> bool;
 }
 
 // First, let's create a wrapper struct for our Point that we can use as a key in our HashMap

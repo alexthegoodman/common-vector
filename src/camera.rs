@@ -1,0 +1,251 @@
+use cgmath::{Matrix4, Point2, Point3, Vector2, Vector3, Vector4};
+
+use crate::{
+    basic::{Point, WindowSize},
+    editor::size_to_ndc,
+    guideline::point_to_ndc,
+};
+
+#[derive(Clone, Copy, Debug)]
+pub struct Camera {
+    pub position: Vector2<f32>,
+    pub zoom: f32,
+    pub window_size: WindowSize,
+    pub focus_point: Vector2<f32>, // Center point of the view
+                                   // Implied constants:
+                                   // direction: Always (0, 0, -1)    // Always looking into screen
+                                   // up: Always (0, 1, 0)           // Y is always up
+                                   // znear: -1.0                    // Simple z-range for 2D
+                                   // zfar: 1.0                      // Simple z-range for 2D
+}
+
+impl Camera {
+    pub fn new(window_size: WindowSize) -> Self {
+        let focus_point = Vector2::new(
+            window_size.width as f32 / 2.0,
+            window_size.height as f32 / 2.0,
+        );
+
+        Self {
+            position: Vector2::new(0.0, 0.0),
+            zoom: 1.0,
+            window_size,
+            focus_point,
+        }
+    }
+
+    pub fn screen_to_world(&self, screen_pos: Point) -> Point {
+        Point {
+            x: (screen_pos.x + self.position.x),
+            y: (screen_pos.y + self.position.y),
+        }
+    }
+
+    pub fn world_to_screen(&self, world_pos: Point) -> Point {
+        Point {
+            x: (world_pos.x - self.position.x),
+            y: (world_pos.y - self.position.y),
+        }
+    }
+
+    pub fn ds_ndc_to_top_left(&self, ds_ndc_pos: Point) -> Point {
+        let aspect_ratio = self.window_size.width as f32 / self.window_size.height as f32;
+
+        Point {
+            x: ((ds_ndc_pos.x / aspect_ratio)
+                + (self.window_size.width as f32 / aspect_ratio) as f32)
+                - 90.0,
+            y: ((-ds_ndc_pos.y / 2.0) + (self.window_size.height as f32 / 2.0) as f32) - 0.0,
+        }
+    }
+
+    // Reverse conversion (world to NDC)
+    pub fn world_to_ndc(&self, world_point: Point3<f32>) -> (f32, f32) {
+        // Apply view-projection matrix
+        let view = self.get_view();
+        let projection = self.get_projection();
+        let view_proj = projection * view;
+
+        // Transform point to clip space
+        let clip = view_proj * Vector4::new(world_point.x, world_point.y, world_point.z, 1.0);
+
+        // Perform perspective divide
+        let ndc_x = clip.x / clip.w;
+        let ndc_y = clip.y / clip.w;
+
+        // Ensure values are exactly in [-1, 1] range
+        let clamped_x = ndc_x.clamp(-1.0, 1.0);
+        let clamped_y = ndc_y.clamp(-1.0, 1.0);
+
+        (clamped_x, clamped_y)
+    }
+
+    pub fn get_view_projection_matrix(&self) -> Matrix4<f32> {
+        let projection = self.get_projection();
+
+        println!(
+            "Camera position: ({}, {})",
+            self.position.x, self.position.y
+        );
+        println!("Zoom: {}", self.zoom);
+
+        let view = self.get_view();
+
+        let vp = projection * view;
+
+        vp
+    }
+
+    pub fn get_projection(&self) -> Matrix4<f32> {
+        // Adjust the orthographic projection based on zoom
+        let zoom_factor = self.zoom;
+        let aspect_ratio = self.window_size.width as f32 / self.window_size.height as f32;
+
+        // Increase the view bounds based on zoom
+        cgmath::ortho(
+            -(zoom_factor * aspect_ratio) / 2.0, // left
+            (zoom_factor * aspect_ratio) / 2.0,  // right
+            -zoom_factor,                        // bottom
+            zoom_factor,                         // top
+            -100.0,                              // near
+            100.0,                               // far
+        )
+    }
+
+    pub fn get_view(&self) -> Matrix4<f32> {
+        let test_ndc = size_to_ndc(&self.window_size, self.position.x, self.position.y);
+        let view = Matrix4::new(
+            self.zoom,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            self.zoom,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            -test_ndc.0,
+            -test_ndc.1,
+            0.0,
+            1.0,
+        );
+
+        view
+    }
+
+    pub fn pan(&mut self, delta: Vector2<f32>) {
+        println!("delta {:?} {:?}", delta, self.position);
+        self.position += delta;
+    }
+
+    pub fn zoom(&mut self, factor: f32, center: Point) {
+        // let world_center = self.screen_to_world(center);
+        let world_center = center;
+
+        // For zoom in/out to be reversible, we need multiplicative inverses
+        // e.g., zooming by 0.9 then by 1/0.9 should restore original state
+        let zoom_factor = if factor > 0.0 {
+            1.0 + factor
+        } else {
+            1.0 / (1.0 - factor)
+        };
+
+        println!("zoom {:?} {:?}", self.zoom, zoom_factor);
+
+        let old_zoom = self.zoom;
+        self.zoom = (self.zoom * zoom_factor).clamp(-10.0, 10.0);
+
+        // Keep the point under cursor stationary
+        // let world_pos = Vector2::new(world_center.x, world_center.y);
+        // self.position = world_pos + (self.position - world_pos) * (old_zoom / self.zoom);
+    }
+}
+
+use bytemuck::{Pod, Zeroable};
+use cgmath::SquareMatrix;
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone, Pod, Zeroable)]
+pub struct CameraUniform {
+    view_proj: [[f32; 4]; 4],
+}
+
+impl CameraUniform {
+    pub fn new() -> Self {
+        Self {
+            view_proj: Matrix4::identity().into(),
+        }
+    }
+
+    pub fn update_view_proj(&mut self, camera: &Camera) {
+        self.view_proj = camera.get_view_projection_matrix().into();
+    }
+}
+
+pub struct CameraBinding {
+    pub buffer: wgpu::Buffer,
+    pub bind_group: wgpu::BindGroup,
+    pub bind_group_layout: wgpu::BindGroupLayout,
+    pub uniform: CameraUniform,
+}
+
+impl CameraBinding {
+    pub fn new(device: &wgpu::Device) -> Self {
+        let uniform = CameraUniform::new();
+
+        // Create the uniform buffer
+        let buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Camera Uniform Buffer"),
+            size: std::mem::size_of::<CameraUniform>() as u64,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        // Create bind group layout
+        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("Camera Bind Group Layout"),
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: Some(
+                        std::num::NonZeroU64::new(std::mem::size_of::<CameraUniform>() as u64)
+                            .unwrap(),
+                    ),
+                },
+                count: None,
+            }],
+        });
+
+        // Create bind group
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Camera Bind Group"),
+            layout: &bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: buffer.as_entire_binding(),
+            }],
+        });
+
+        Self {
+            buffer,
+            bind_group,
+            bind_group_layout,
+            uniform,
+        }
+    }
+
+    pub fn update(&mut self, queue: &wgpu::Queue, camera: &Camera) {
+        self.uniform.update_view_proj(camera);
+        queue.write_buffer(
+            &self.buffer,
+            0,
+            bytemuck::cast_slice(&[self.uniform.view_proj]),
+        );
+    }
+}
