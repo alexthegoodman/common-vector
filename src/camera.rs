@@ -48,19 +48,6 @@ impl Camera {
         }
     }
 
-    // pub fn ds_ndc_to_top_left(&self, ds_ndc_pos: Point) -> Point {
-    //     let aspect_ratio = self.window_size.width as f32 / self.window_size.height as f32;
-
-    //     // reverses what is done in visualize_ray_intersection
-
-    //     Point {
-    //         x: ((ds_ndc_pos.x / aspect_ratio)
-    //             + (self.window_size.width as f32 / aspect_ratio) as f32)
-    //             - 90.0,
-    //         y: ((-ds_ndc_pos.y / 2.0) + (self.window_size.height as f32 / 2.0) as f32) - 0.0,
-    //     }
-    // }
-
     pub fn ds_ndc_to_top_left(&self, ds_ndc_pos: Point) -> Point {
         let aspect_ratio = self.window_size.width as f32 / self.window_size.height as f32;
         let pos_x = ds_ndc_pos.x / self.window_size.width as f32;
@@ -104,35 +91,8 @@ impl Camera {
         (ndc_x, ndc_y)
     }
 
-    // Reverse conversion (world to NDC)
-    pub fn world_to_ndc(&self, world_point: Point3<f32>) -> (f32, f32) {
-        // Apply view-projection matrix
-        let view = self.get_view();
-        let projection = self.get_projection();
-        let view_proj = projection * view;
-
-        // Transform point to clip space
-        let clip = view_proj * Vector4::new(world_point.x, world_point.y, world_point.z, 1.0);
-
-        // Perform perspective divide
-        let ndc_x = clip.x / clip.w;
-        let ndc_y = clip.y / clip.w;
-
-        // Ensure values are exactly in [-1, 1] range
-        let clamped_x = ndc_x.clamp(-1.0, 1.0);
-        let clamped_y = ndc_y.clamp(-1.0, 1.0);
-
-        (clamped_x, clamped_y)
-    }
-
     pub fn get_view_projection_matrix(&self) -> Matrix4<f32> {
         let projection = self.get_projection();
-
-        println!(
-            "Camera position: ({}, {})",
-            self.position.x, self.position.y
-        );
-        println!("Zoom: {}", self.zoom);
 
         let view = self.get_view();
 
@@ -142,11 +102,9 @@ impl Camera {
     }
 
     pub fn get_projection(&self) -> Matrix4<f32> {
-        // Adjust the orthographic projection based on zoom
         let zoom_factor = self.zoom;
         let aspect_ratio = self.window_size.width as f32 / self.window_size.height as f32;
 
-        // Increase the view bounds based on zoom
         cgmath::ortho(
             -(zoom_factor * aspect_ratio) / 2.0, // left
             (zoom_factor * aspect_ratio) / 2.0,  // right
@@ -160,12 +118,14 @@ impl Camera {
     pub fn get_view(&self) -> Matrix4<f32> {
         let test_ndc = size_to_ndc(&self.window_size, self.position.x, self.position.y);
         let view = Matrix4::new(
-            self.zoom,
+            // self.zoom,
+            1.0,
             0.0,
             0.0,
             0.0,
             0.0,
-            self.zoom,
+            // self.zoom,
+            1.0,
             0.0,
             0.0,
             0.0,
@@ -182,7 +142,7 @@ impl Camera {
     }
 
     pub fn pan(&mut self, delta: Vector2<f32>) {
-        println!("delta {:?} {:?}", delta, self.position);
+        // println!("delta {:?} {:?}", delta, self.position);
         self.position += delta;
     }
 

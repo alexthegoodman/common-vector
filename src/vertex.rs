@@ -14,10 +14,15 @@ pub struct Vertex {
 unsafe impl Pod for Vertex {}
 unsafe impl Zeroable for Vertex {}
 
+pub fn get_z_layer(layer: f32) -> f32 {
+    let z = -(layer as f32 / 1000.0);
+    z
+}
+
 impl Vertex {
-    pub fn new(x: f32, y: f32, layer: i32, color: [f32; 4]) -> Self {
+    pub fn new(x: f32, y: f32, z: f32, color: [f32; 4]) -> Self {
         // the lower the layer, the higher in stack
-        let z = -(layer as f32 / 1000.0); // provide layer as 1, 2, etc but adjust z position minutely
+        // let z = -(layer as f32 / 1000.0); // provide layer as 1, 2, etc but adjust z position minutely
         Vertex {
             position: [x, y, z],
             tex_coords: [0.0, 0.0], // Default UV coordinates

@@ -180,42 +180,6 @@ impl Editor {
         self.update_camera_binding(queue);
     }
 
-    // pub fn add_polygon(&mut self, polygon: Polygon) {
-    //     let world_position = self.camera.screen_to_world(polygon.transform.position);
-    //     let poly_len = self.polygons.len();
-    //     self.polygons.push(polygon);
-    //     self.polygons[poly_len].transform.position = world_position;
-    //     self.run_layers_update();
-    // }
-
-    // pub fn add_polygon(&mut self, mut polygon: Polygon) {
-    //     // Convert from screen coordinates (0 to window_size) to clip space (-1 to 1)
-    //     let viewport = self.viewport.lock().unwrap();
-    //     let clip_position = Point {
-    //         x: (polygon.transform.position.x / viewport.width) * 2.0 - 1.0,
-    //         y: -((polygon.transform.position.y / viewport.height) * 2.0 - 1.0), // Flip Y for clip space
-    //     };
-
-    //     let poly_len = self.polygons.len();
-    //     polygon.transform.position = clip_position;
-    //     self.polygons.push(polygon);
-    //     self.run_layers_update();
-    // }
-
-    // pub fn add_polygon(&mut self, mut polygon: Polygon) {
-    //     // Convert from screen coordinates (e.g., 0-800) to clip space (-1 to 1)
-    //     // but don't apply any additional scaling
-    //     let clip_position = Point {
-    //         x: polygon.transform.position.x, // Keep original position for now
-    //         y: polygon.transform.position.y, // We'll let the camera handle transformation
-    //     };
-
-    //     let poly_len = self.polygons.len();
-    //     polygon.transform.position = clip_position;
-    //     self.polygons.push(polygon);
-    //     self.run_layers_update();
-    // }
-
     pub fn add_polygon(&mut self, mut polygon: Polygon) {
         let camera = self.camera.as_ref().expect("Couldn't get camera");
         // let world_position = camera.screen_to_world(polygon.transform.position);
@@ -251,13 +215,6 @@ impl Editor {
     pub fn update_cursor(&self) {
         let cursor = match self.control_mode {
             ControlMode::Point => {
-                // if self.dragging_point.is_some() {
-                //     CursorIcon::Grabbing
-                // } else if self.hover_point.is_some() {
-                //     CursorIcon::Grab
-                // } else {
-                //     CursorIcon::Default
-                // }
                 // I feel that the ring / dot is better, and Grab covers it up
                 CursorIcon::Default
             }
@@ -303,28 +260,6 @@ impl Editor {
 
                     // Determine cursor based on 8 primary directions
                     let normalized_degrees = ((degrees % 180.0) + 180.0) % 180.0;
-
-                    // if (normalized_degrees >= 0.0 && normalized_degrees <= 22.5)
-                    //     || (normalized_degrees >= 157.5 && normalized_degrees <= 180.0)
-                    // {
-                    //     // CursorIcon::EwResize
-                    //     CursorIcon::NsResize
-                    // } else if normalized_degrees >= 67.5 && normalized_degrees <= 112.5 {
-                    //     // CursorIcon::NsResize
-                    //     CursorIcon::EwResize
-                    // } else if (normalized_degrees > 22.5 && normalized_degrees < 67.5) {
-                    //     if degrees <= 90.0 || degrees >= 270.0 {
-                    //         CursorIcon::NwseResize // Swapped from NeswResize
-                    //     } else {
-                    //         CursorIcon::NeswResize // Swapped from NwseResize
-                    //     }
-                    // } else {
-                    //     if degrees <= 90.0 || degrees >= 270.0 {
-                    //         CursorIcon::NeswResize // Swapped from NwseResize
-                    //     } else {
-                    //         CursorIcon::NwseResize // Swapped from NeswResize
-                    //     }
-                    // }
 
                     // Define diagonal variables based on the degrees
                     let is_north_west = degrees > 270.0 && degrees < 360.0;
@@ -403,13 +338,6 @@ impl Editor {
         device: &wgpu::Device,
     ) {
         let camera = self.camera.as_mut().expect("Couldn't get camera");
-        // let x = self.last_x;
-        // let y = self.last_y;
-        // let mouse_pos = Point { x, y };
-
-        // let world_pos = self.camera.screen_to_world(mouse_pos);
-
-        // let last_screen = self.last_screen;
 
         if let Some(hover_point) = self.hover_point {
             for (poly_index, polygon) in self.polygons.iter_mut().enumerate() {
@@ -818,116 +746,116 @@ impl Ray {
     }
 }
 
-// Helper function to properly transform screen to NDC coordinates
-fn screen_to_ndc(
-    screen_x: f32,
-    screen_y: f32,
-    screen_width: f32,
-    screen_height: f32,
-    viewport_offset_x: f32, // Usually 0.0
-    viewport_offset_y: f32, // Usually 0.0
-) -> (f32, f32) {
-    // Adjust for viewport offset
-    let adjusted_x = screen_x - viewport_offset_x;
-    let adjusted_y = screen_y - viewport_offset_y;
+// // Helper function to properly transform screen to NDC coordinates
+// fn screen_to_ndc(
+//     screen_x: f32,
+//     screen_y: f32,
+//     screen_width: f32,
+//     screen_height: f32,
+//     viewport_offset_x: f32, // Usually 0.0
+//     viewport_offset_y: f32, // Usually 0.0
+// ) -> (f32, f32) {
+//     // Adjust for viewport offset
+//     let adjusted_x = screen_x - viewport_offset_x;
+//     let adjusted_y = screen_y - viewport_offset_y;
 
-    // Use viewport dimensions for correct scaling
-    let ndc_x = (2.0 * adjusted_x) / screen_width - 1.0;
-    let ndc_y = 1.0 - (2.0 * adjusted_y) / screen_height; // Flip Y coordinates
+//     // Use viewport dimensions for correct scaling
+//     let ndc_x = (2.0 * adjusted_x) / screen_width - 1.0;
+//     let ndc_y = 1.0 - (2.0 * adjusted_y) / screen_height; // Flip Y coordinates
 
-    (ndc_x, ndc_y)
-}
+//     (ndc_x, ndc_y)
+// }
 
 use cgmath::SquareMatrix;
 use cgmath::Transform;
 
-pub fn create_ray_from_screen(
-    screen_x: f32,
-    screen_y: f32,
-    screen_width: f32,
-    screen_height: f32,
-    projection_matrix: &Matrix4<f32>,
-    view_matrix: &Matrix4<f32>,
-) -> Ray {
-    // Convert screen coordinates to NDC space
-    let (ndc_x, ndc_y) = screen_to_ndc(
-        screen_x,
-        screen_y,
-        screen_width,
-        screen_height,
-        0.0, // viewport_offset_x
-        0.0, // viewport_offset_y
-    );
+// pub fn create_ray_from_screen(
+//     screen_x: f32,
+//     screen_y: f32,
+//     screen_width: f32,
+//     screen_height: f32,
+//     projection_matrix: &Matrix4<f32>,
+//     view_matrix: &Matrix4<f32>,
+// ) -> Ray {
+//     // Convert screen coordinates to NDC space
+//     let (ndc_x, ndc_y) = screen_to_ndc(
+//         screen_x,
+//         screen_y,
+//         screen_width,
+//         screen_height,
+//         0.0, // viewport_offset_x
+//         0.0, // viewport_offset_y
+//     );
 
-    // Ensure NDC coordinates are properly bound
-    let ndc_x = ndc_x.max(-1.0).min(1.0);
-    let ndc_y = ndc_y.max(-1.0).min(1.0);
+//     // Ensure NDC coordinates are properly bound
+//     let ndc_x = ndc_x.max(-1.0).min(1.0);
+//     let ndc_y = ndc_y.max(-1.0).min(1.0);
 
-    // Create homogeneous points in clip space
-    let clip_near = Vector4::new(ndc_x, ndc_y, -1.0, 1.0);
-    let clip_far = Vector4::new(ndc_x, ndc_y, 1.0, 1.0);
+//     // Create homogeneous points in clip space
+//     let clip_near = Vector4::new(ndc_x, ndc_y, -1.0, 1.0);
+//     let clip_far = Vector4::new(ndc_x, ndc_y, 1.0, 1.0);
 
-    // Get inverse matrices
-    let inv_projection = projection_matrix
-        .invert()
-        .expect("Failed to invert projection matrix");
-    let inv_view = view_matrix.invert().expect("Failed to invert view matrix");
+//     // Get inverse matrices
+//     let inv_projection = projection_matrix
+//         .invert()
+//         .expect("Failed to invert projection matrix");
+//     let inv_view = view_matrix.invert().expect("Failed to invert view matrix");
 
-    // Transform to view space (handle w component properly)
-    let mut view_near = inv_projection * clip_near;
-    let mut view_far = inv_projection * clip_far;
+//     // Transform to view space (handle w component properly)
+//     let mut view_near = inv_projection * clip_near;
+//     let mut view_far = inv_projection * clip_far;
 
-    // Perform perspective divide if w is not 1.0
-    if view_near.w.abs() > std::f32::EPSILON {
-        view_near = view_near / view_near.w;
-    }
-    if view_far.w.abs() > std::f32::EPSILON {
-        view_far = view_far / view_far.w;
-    }
+//     // Perform perspective divide if w is not 1.0
+//     if view_near.w.abs() > std::f32::EPSILON {
+//         view_near = view_near / view_near.w;
+//     }
+//     if view_far.w.abs() > std::f32::EPSILON {
+//         view_far = view_far / view_far.w;
+//     }
 
-    // Transform to world space
-    let world_near = inv_view.transform_point(Point3::new(view_near.x, view_near.y, view_near.z));
-    let world_far = inv_view.transform_point(Point3::new(view_far.x, view_far.y, view_far.z));
+//     // Transform to world space
+//     let world_near = inv_view.transform_point(Point3::new(view_near.x, view_near.y, view_near.z));
+//     let world_far = inv_view.transform_point(Point3::new(view_far.x, view_far.y, view_far.z));
 
-    // Calculate direction and ensure it's normalized
-    let direction = world_far - world_near;
-    let direction = direction.normalize();
+//     // Calculate direction and ensure it's normalized
+//     let direction = world_far - world_near;
+//     let direction = direction.normalize();
 
-    Ray::new(world_near, direction)
-}
+//     Ray::new(world_near, direction)
+// }
 
-// Example intersection test with an axis-aligned bounding box (AABB)
-#[derive(Debug)]
-pub struct AABB {
-    pub min: Point3<f32>,
-    pub max: Point3<f32>,
-}
+// // Example intersection test with an axis-aligned bounding box (AABB)
+// #[derive(Debug)]
+// pub struct AABB {
+//     pub min: Point3<f32>,
+//     pub max: Point3<f32>,
+// }
 
-impl AABB {
-    pub fn intersects_ray(&self, ray: &Ray) -> Option<f32> {
-        let mut tmin = f32::NEG_INFINITY;
-        let mut tmax = f32::INFINITY;
+// impl AABB {
+//     pub fn intersects_ray(&self, ray: &Ray) -> Option<f32> {
+//         let mut tmin = f32::NEG_INFINITY;
+//         let mut tmax = f32::INFINITY;
 
-        for i in 0..3 {
-            let inv_dir = 1.0 / ray.direction[i];
-            let mut t0 = (self.min[i] - ray.origin[i]) * inv_dir;
-            let mut t1 = (self.max[i] - ray.origin[i]) * inv_dir;
+//         for i in 0..3 {
+//             let inv_dir = 1.0 / ray.direction[i];
+//             let mut t0 = (self.min[i] - ray.origin[i]) * inv_dir;
+//             let mut t1 = (self.max[i] - ray.origin[i]) * inv_dir;
 
-            if inv_dir < 0.0 {
-                std::mem::swap(&mut t0, &mut t1);
-            }
+//             if inv_dir < 0.0 {
+//                 std::mem::swap(&mut t0, &mut t1);
+//             }
 
-            tmin = tmin.max(t0);
-            tmax = tmax.min(t1);
+//             tmin = tmin.max(t0);
+//             tmax = tmax.min(t1);
 
-            if tmax <= tmin {
-                return None;
-            }
-        }
+//             if tmax <= tmin {
+//                 return None;
+//             }
+//         }
 
-        Some(tmin)
-    }
-}
+//         Some(tmin)
+//     }
+// }
 
 pub fn visualize_ray_intersection(
     // device: &wgpu::Device,
@@ -941,24 +869,21 @@ pub fn visualize_ray_intersection(
     let ndc_x = screen_x / camera.window_size.width as f32;
     let ndc_y = (screen_y / camera.window_size.height as f32);
 
-    // Convert 2D position to 3D (keeping Z at 0 for 2D plane)
-    // let camera_pos_ndc = point_to_ndc(
-    //     Point {
-    //         x: camera.position.x,
-    //         y: camera.position.y,
-    //     },
-    //     window_size,
-    // );
-    // let camera_pos_ndc = camera.ndc_to_normalized(camera_pos_ndc.x, camera_pos_ndc.y);
-    let view_pos = Vector3::new(0.0, 0.0, 0.0); // investigate why moves when this all 0
+    let view_pos = Vector3::new(0.0, 0.0, 0.0);
     let model_view = Matrix4::from_translation(view_pos);
 
-    let plane_size_normal = Vector3::new((1.0 * aspect_ratio) / 2.0, (1.0 * 2.0) / 2.0, 0.0);
+    let scale_factor = camera.zoom;
+
+    let plane_size_normal = Vector3::new(
+        (1.0 * aspect_ratio * scale_factor) / 2.0,
+        (1.0 * 2.0 * scale_factor) / 2.0,
+        0.0,
+    );
 
     // Transform NDC point to view space
     let view_point_normal = Point3::new(
-        ndc_x * plane_size_normal.x,
-        ndc_y * plane_size_normal.y,
+        (ndc_x * plane_size_normal.x),
+        (ndc_y * plane_size_normal.y),
         0.0,
     );
     let world_point_normal = model_view
@@ -970,15 +895,14 @@ pub fn visualize_ray_intersection(
 
     // Create a plane in view space
     let plane_center = Point3::new(
-        -(camera.window_size.width as f32),
-        -(camera.window_size.height as f32),
+        -(camera.window_size.width as f32) * scale_factor,
+        -(camera.window_size.height as f32) * scale_factor,
         0.0,
     );
 
-    // let plane_center = Point3::new(0.0, 0.0, 0.0);
     let plane_size = Vector3::new(
-        (camera.window_size.width as f32) * aspect_ratio, // definitely needed aspect_ratio
-        (camera.window_size.height as f32) * 2.0,
+        (camera.window_size.width as f32 * scale_factor) * aspect_ratio,
+        (camera.window_size.height as f32 * scale_factor) * 2.0,
         0.0,
     );
 
@@ -1004,15 +928,16 @@ pub fn visualize_ray_intersection(
 
     let ndc = camera.normalized_to_ndc(world_point_normal.x, world_point_normal.y);
 
-    let top_left = Point {
-        x: (world_point_normal.x * window_size.width as f32) + (camera.position.x * 0.5) + 70.0, // maybe account for camera position
-        y: (world_point_normal.y * window_size.height as f32) - (camera.position.y * 0.5),
-    };
+    let offset_x = (scale_factor - 1.0) * (400.0 * aspect_ratio);
+    let offset_y = (scale_factor - 1.0) * 400.0;
 
-    // println!(
-    //     "is top_left way higher than middle? {:?} {:?} {:?}",
-    //     top_left, screen_x, screen_y
-    // );
+    let top_left: Point = Point {
+        x: (world_point_normal.x * window_size.width as f32) + (camera.position.x * 0.5) + 70.0
+            - offset_x,
+        y: (world_point_normal.y * window_size.height as f32)
+            - (camera.position.y * 0.5)
+            - offset_y,
+    };
 
     Ray {
         direction,

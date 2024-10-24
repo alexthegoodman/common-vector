@@ -5,7 +5,7 @@ use crate::{
     basic::{Point, WindowSize},
     camera::{self, Camera},
     editor::size_to_ndc,
-    vertex::Vertex,
+    vertex::{get_z_layer, Vertex},
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -129,18 +129,18 @@ pub fn draw_dot(
     color: [f32; 4],
     camera: &Camera,
 ) -> (Vec<Vertex>, Vec<u32>, wgpu::Buffer, wgpu::Buffer) {
-    // let (x, y) = size_to_ndc(window_size, point.x, point.y);
-    // let world_point = camera.screen_to_world_ndc(Point { x, y });
-    // let x = world_point.x;
-    // let y = world_point.y;
     let x = point.x;
     let y = point.y;
-    // println!("Draw ring... {:?} {:?}", x, y);
-    let outer_radius = 9.0 / window_size.width.min(window_size.height) as f32; // 5 pixel outer radius
-    let inner_radius = outer_radius * 0.7; // 70% of outer radius for inner circle
+
+    let scale_factor = camera.zoom;
+    let outer_radius = 0.01 * scale_factor;
+    let inner_radius = outer_radius * 0.7;
+
+    // println!("outer_radius {:?}", outer_radius);
+
     let segments = 32 as u32; // Number of segments to approximate the circle
 
-    let dot_layer = 1;
+    let dot_z = get_z_layer(1.0);
 
     let mut vertices = Vec::with_capacity((segments * 2) as usize);
     let mut indices: Vec<u32> = Vec::with_capacity((segments * 6) as usize);
@@ -155,7 +155,7 @@ pub fn draw_dot(
         vertices.push(Vertex::new(
             x + outer_radius * cos,
             y + outer_radius * sin,
-            dot_layer,
+            dot_z,
             color,
         ));
 
@@ -163,7 +163,7 @@ pub fn draw_dot(
         vertices.push(Vertex::new(
             x + inner_radius * cos,
             y + inner_radius * sin,
-            dot_layer,
+            dot_z,
             color,
         ));
 

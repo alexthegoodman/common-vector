@@ -5,7 +5,7 @@ use crate::{
     basic::{BoundingBox, Point, PointKey, Shape, WindowSize},
     camera::{self, Camera},
     editor::size_to_ndc,
-    vertex::Vertex,
+    vertex::{get_z_layer, Vertex},
 };
 
 impl Shape for Path {
@@ -67,7 +67,7 @@ pub fn get_path_data(
     let mut current_point = Point { x: 0.0, y: 0.0 };
     let mut index = 0;
 
-    let path_layer = 2;
+    let path_layer = get_z_layer(2.0);
 
     for command in &commands {
         match command {

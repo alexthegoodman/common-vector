@@ -10,7 +10,7 @@ use crate::{
     },
     editor::{size_to_ndc, visualize_ray_intersection},
     transform::{self, Transform as SnTransform},
-    vertex::Vertex,
+    vertex::{get_z_layer, Vertex},
 };
 
 impl Shape for Polygon {
@@ -105,7 +105,7 @@ pub fn get_polygon_data(
                     - ((vertex.position().y + transform.position.y) / window_size.height as f32)
                         * 2.0;
 
-                Vertex::new(x, y, 3, fill)
+                Vertex::new(x, y, get_z_layer(3.0), fill)
             }),
         )
         .unwrap();
@@ -124,7 +124,7 @@ pub fn get_polygon_data(
                 let y = 1.0
                     - ((vertex.position().y + transform.position.y) / window_size.height as f32)
                         * 2.0;
-                Vertex::new(x, y, 2, [0.0, 0.0, 0.0, 1.0]) // Black border
+                Vertex::new(x, y, get_z_layer(2.0), [0.0, 0.0, 0.0, 1.0]) // Black border
             }),
         )
         .unwrap();

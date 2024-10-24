@@ -1,6 +1,6 @@
 use crate::{
     basic::{Point, WindowSize},
-    vertex::Vertex,
+    vertex::{get_z_layer, Vertex},
 };
 use wgpu::util::DeviceExt;
 
@@ -58,11 +58,13 @@ pub fn create_guide_line_buffers(
         window_size,
     );
 
+    let layer = get_z_layer(3.0);
+
     let vertices = vec![
-        Vertex::new(p1.x, p1.y, 3, color),
-        Vertex::new(p2.x, p2.y, 3, color),
-        Vertex::new(p3.x, p3.y, 3, color),
-        Vertex::new(p4.x, p4.y, 3, color),
+        Vertex::new(p1.x, p1.y, layer, color),
+        Vertex::new(p2.x, p2.y, layer, color),
+        Vertex::new(p3.x, p3.y, layer, color),
+        Vertex::new(p4.x, p4.y, layer, color),
     ];
 
     let indices = vec![0, 1, 2, 2, 3, 0];
