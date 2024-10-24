@@ -9,7 +9,7 @@ use std::f32::consts::PI;
 use uuid::Uuid;
 use winit::window::CursorIcon;
 
-use crate::basic::Shape;
+use crate::basic::{color_to_wgpu, string_to_f32, Shape};
 use crate::camera::{self, Camera, CameraBinding};
 use crate::guideline::point_to_ndc;
 use crate::polygon::PolygonConfig;
@@ -55,30 +55,6 @@ impl Viewport {
         (ndc_x, ndc_y)
     }
 }
-
-// pub fn size_to_ndc(window_size: &WindowSize, x: f32, y: f32) -> (f32, f32) {
-//     // let ndc_x = (x / window_size.width as f32) * 2.0 - 1.0;
-//     // let ndc_y = -((y / window_size.height as f32) * 2.0 - 1.0); // Flip Y-axis
-//     // Current (top-left origin)
-//     // let ndc_y = 1.0 - ((2.0 * screen_y) / self.window_size.height as f32);
-
-//     // For center origin, we might want:
-//     let ndc_x = -((2.0 * x) / window_size.width as f32) + 1.0;
-//     let ndc_y = -((2.0 * y) / window_size.height as f32) + 1.0;
-//     // just flips the above 180 degrees
-//     // let ndc_x = ((2.0 * (x - window_size.width as f32 / 2.0)) / window_size.width as f32);
-//     // let ndc_y = ((2.0 * (y - window_size.height as f32 / 2.0)) / window_size.height as f32);
-
-//     (ndc_x, ndc_y)
-// }
-
-// pub fn size_to_ndc(window_size: &WindowSize, x: f32, y: f32) -> (f32, f32) {
-//     // Convert screen space (top-left origin) to NDC (center origin)
-//     let ndc_x = (2.0 * x / window_size.width as f32) - 1.0; // X from -1 to 1
-//     let ndc_y = 1.0 - (2.0 * y / window_size.height as f32); // Y from 1 to -1 (flip Y)
-
-//     (ndc_x, ndc_y)
-// }
 
 pub fn size_to_ndc(window_size: &WindowSize, x: f32, y: f32) -> (f32, f32) {
     let ndc_x = x / window_size.width as f32;
@@ -126,6 +102,11 @@ pub struct Editor {
 }
 
 use std::borrow::BorrowMut;
+
+pub enum InputValue {
+    Text(String),
+    Number(f32),
+}
 
 impl Editor {
     pub fn new(viewport: Arc<Mutex<Viewport>>) -> Self {
@@ -191,6 +172,99 @@ impl Editor {
         polygon.transform.position = world_position;
         self.polygons.push(polygon);
         self.run_layers_update();
+    }
+
+    pub fn update_polygon(&mut self, selected_id: Uuid, key: &str, new_value: InputValue) {
+        // let mut gpu_helper = cloned_helper.lock().unwrap();
+
+        // First iteration: find the index of the selected polygon
+        let polygon_index = self.polygons.iter().position(|p| p.id == selected_id);
+
+        if let Some(index) = polygon_index {
+            println!("Found selected polygon with ID: {}", selected_id);
+
+            // Get the necessary data from editor
+            let viewport_width = self.viewport.lock().unwrap().width;
+            let viewport_height = self.viewport.lock().unwrap().height;
+            let device = &self
+                .gpu_resources
+                .as_ref()
+                .expect("Couldn't get gpu resources")
+                .device;
+
+            let window_size = WindowSize {
+                width: viewport_width as u32,
+                height: viewport_height as u32,
+            };
+
+            let camera = self.camera.expect("Couldn't get camera");
+
+            // Second iteration: update the selected polygon
+            if let Some(selected_polygon) = self.polygons.get_mut(index) {
+                match new_value {
+                    InputValue::Text(s) => match key {
+                        "red" => selected_polygon.update_data_from_fill(
+                            &window_size,
+                            &device,
+                            [
+                                color_to_wgpu(string_to_f32(&s).expect("Couldn't convert string")),
+                                selected_polygon.fill[1],
+                                selected_polygon.fill[2],
+                                selected_polygon.fill[3],
+                            ],
+                            &camera,
+                        ),
+                        "green" => selected_polygon.update_data_from_fill(
+                            &window_size,
+                            &device,
+                            [
+                                selected_polygon.fill[0],
+                                color_to_wgpu(string_to_f32(&s).expect("Couldn't convert string")),
+                                selected_polygon.fill[2],
+                                selected_polygon.fill[3],
+                            ],
+                            &camera,
+                        ),
+                        "blue" => selected_polygon.update_data_from_fill(
+                            &window_size,
+                            &device,
+                            [
+                                selected_polygon.fill[0],
+                                selected_polygon.fill[1],
+                                color_to_wgpu(string_to_f32(&s).expect("Couldn't convert string")),
+                                selected_polygon.fill[3],
+                            ],
+                            &camera,
+                        ),
+
+                        _ => println!("No match on input"),
+                    },
+                    InputValue::Number(n) => match key {
+                        "width" => selected_polygon.update_data_from_dimensions(
+                            &window_size,
+                            &device,
+                            (n, selected_polygon.dimensions.1),
+                            &camera,
+                        ),
+                        "height" => selected_polygon.update_data_from_dimensions(
+                            &window_size,
+                            &device,
+                            (selected_polygon.dimensions.0, n),
+                            &camera,
+                        ),
+                        "border_radius" => selected_polygon.update_data_from_border_radius(
+                            &window_size,
+                            &device,
+                            n,
+                            &camera,
+                        ),
+                        _ => println!("No match on input"),
+                    },
+                }
+            }
+        } else {
+            println!("No polygon found with the selected ID: {}", selected_id);
+        }
     }
 
     pub fn run_layers_update(&self) {
@@ -746,116 +820,8 @@ impl Ray {
     }
 }
 
-// // Helper function to properly transform screen to NDC coordinates
-// fn screen_to_ndc(
-//     screen_x: f32,
-//     screen_y: f32,
-//     screen_width: f32,
-//     screen_height: f32,
-//     viewport_offset_x: f32, // Usually 0.0
-//     viewport_offset_y: f32, // Usually 0.0
-// ) -> (f32, f32) {
-//     // Adjust for viewport offset
-//     let adjusted_x = screen_x - viewport_offset_x;
-//     let adjusted_y = screen_y - viewport_offset_y;
-
-//     // Use viewport dimensions for correct scaling
-//     let ndc_x = (2.0 * adjusted_x) / screen_width - 1.0;
-//     let ndc_y = 1.0 - (2.0 * adjusted_y) / screen_height; // Flip Y coordinates
-
-//     (ndc_x, ndc_y)
-// }
-
 use cgmath::SquareMatrix;
 use cgmath::Transform;
-
-// pub fn create_ray_from_screen(
-//     screen_x: f32,
-//     screen_y: f32,
-//     screen_width: f32,
-//     screen_height: f32,
-//     projection_matrix: &Matrix4<f32>,
-//     view_matrix: &Matrix4<f32>,
-// ) -> Ray {
-//     // Convert screen coordinates to NDC space
-//     let (ndc_x, ndc_y) = screen_to_ndc(
-//         screen_x,
-//         screen_y,
-//         screen_width,
-//         screen_height,
-//         0.0, // viewport_offset_x
-//         0.0, // viewport_offset_y
-//     );
-
-//     // Ensure NDC coordinates are properly bound
-//     let ndc_x = ndc_x.max(-1.0).min(1.0);
-//     let ndc_y = ndc_y.max(-1.0).min(1.0);
-
-//     // Create homogeneous points in clip space
-//     let clip_near = Vector4::new(ndc_x, ndc_y, -1.0, 1.0);
-//     let clip_far = Vector4::new(ndc_x, ndc_y, 1.0, 1.0);
-
-//     // Get inverse matrices
-//     let inv_projection = projection_matrix
-//         .invert()
-//         .expect("Failed to invert projection matrix");
-//     let inv_view = view_matrix.invert().expect("Failed to invert view matrix");
-
-//     // Transform to view space (handle w component properly)
-//     let mut view_near = inv_projection * clip_near;
-//     let mut view_far = inv_projection * clip_far;
-
-//     // Perform perspective divide if w is not 1.0
-//     if view_near.w.abs() > std::f32::EPSILON {
-//         view_near = view_near / view_near.w;
-//     }
-//     if view_far.w.abs() > std::f32::EPSILON {
-//         view_far = view_far / view_far.w;
-//     }
-
-//     // Transform to world space
-//     let world_near = inv_view.transform_point(Point3::new(view_near.x, view_near.y, view_near.z));
-//     let world_far = inv_view.transform_point(Point3::new(view_far.x, view_far.y, view_far.z));
-
-//     // Calculate direction and ensure it's normalized
-//     let direction = world_far - world_near;
-//     let direction = direction.normalize();
-
-//     Ray::new(world_near, direction)
-// }
-
-// // Example intersection test with an axis-aligned bounding box (AABB)
-// #[derive(Debug)]
-// pub struct AABB {
-//     pub min: Point3<f32>,
-//     pub max: Point3<f32>,
-// }
-
-// impl AABB {
-//     pub fn intersects_ray(&self, ray: &Ray) -> Option<f32> {
-//         let mut tmin = f32::NEG_INFINITY;
-//         let mut tmax = f32::INFINITY;
-
-//         for i in 0..3 {
-//             let inv_dir = 1.0 / ray.direction[i];
-//             let mut t0 = (self.min[i] - ray.origin[i]) * inv_dir;
-//             let mut t1 = (self.max[i] - ray.origin[i]) * inv_dir;
-
-//             if inv_dir < 0.0 {
-//                 std::mem::swap(&mut t0, &mut t1);
-//             }
-
-//             tmin = tmin.max(t0);
-//             tmax = tmax.min(t1);
-
-//             if tmax <= tmin {
-//                 return None;
-//             }
-//         }
-
-//         Some(tmin)
-//     }
-// }
 
 pub fn visualize_ray_intersection(
     // device: &wgpu::Device,
@@ -891,7 +857,7 @@ pub fn visualize_ray_intersection(
         .unwrap()
         .transform_point(view_point_normal);
 
-    println!("normal {:?}", world_point_normal);
+    // println!("normal {:?}", world_point_normal);
 
     // Create a plane in view space
     let plane_center = Point3::new(
