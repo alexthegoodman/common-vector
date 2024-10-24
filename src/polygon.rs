@@ -3,7 +3,7 @@ use uuid::Uuid;
 use wgpu::util::DeviceExt;
 
 use crate::{
-    basic::{BoundingBox, Point, Shape, WindowSize},
+    basic::{rgb_to_wgpu, BoundingBox, Point, Shape, WindowSize},
     camera::{self, Camera},
     dot::{
         closest_point_on_line_segment, closest_point_on_line_segment_with_info, distance, EdgePoint,
@@ -77,6 +77,7 @@ pub fn get_polygon_data(
     transform: &SnTransform,
     border_radius: f32,
     fill: [f32; 4],
+    stroke: Stroke,
 ) -> (
     Vec<Vertex>,
     Vec<u32>,
@@ -113,21 +114,25 @@ pub fn get_polygon_data(
     // println!("get_polygon_data {:?}", geometry.vertices);
 
     // Stroke the polygon (optional, for a border effect)
-    stroke_tessellator
-        .tessellate_path(
-            &path,
-            &StrokeOptions::default().with_line_width(2.0),
-            &mut BuffersBuilder::new(&mut geometry, |vertex: StrokeVertex| {
-                let x = ((vertex.position().x + transform.position.x) / window_size.width as f32)
-                    * 2.0
-                    - 1.0;
-                let y = 1.0
-                    - ((vertex.position().y + transform.position.y) / window_size.height as f32)
-                        * 2.0;
-                Vertex::new(x, y, get_z_layer(2.0), [0.0, 0.0, 0.0, 1.0]) // Black border
-            }),
-        )
-        .unwrap();
+    if (stroke.thickness > 0.0) {
+        stroke_tessellator
+            .tessellate_path(
+                &path,
+                &StrokeOptions::default().with_line_width(stroke.thickness),
+                &mut BuffersBuilder::new(&mut geometry, |vertex: StrokeVertex| {
+                    let x = ((vertex.position().x + transform.position.x)
+                        / window_size.width as f32)
+                        * 2.0
+                        - 1.0;
+                    let y = 1.0
+                        - ((vertex.position().y + transform.position.y)
+                            / window_size.height as f32)
+                            * 2.0;
+                    Vertex::new(x, y, get_z_layer(2.0), stroke.fill) // Black border
+                }),
+            )
+            .unwrap();
+    }
 
     let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
         label: Some("Vertex Buffer"),
@@ -212,56 +217,6 @@ fn create_rounded_polygon_path(
     builder.build()
 }
 
-// fn create_rounded_polygon_path(
-//     normalized_points: Vec<Point>,
-//     dimensions: (f32, f32),
-//     border_radius: f32,
-// ) -> LyonPath {
-//     let mut builder = LyonPath::builder();
-//     let n = normalized_points.len();
-
-//     // Calculate radius in normalized space
-//     // If you want border_radius in pixels, divide by the relevant dimension
-//     let scaled_radius = border_radius / dimensions.0.min(dimensions.1);
-
-//     for i in 0..n {
-//         let p0 = normalized_points[(i + n - 1) % n];
-//         let p1 = normalized_points[i];
-//         let p2 = normalized_points[(i + 1) % n];
-
-//         let v1 = Vector::new(p1.x - p0.x, p1.y - p0.y);
-//         let v2 = Vector::new(p2.x - p1.x, p2.y - p1.y);
-
-//         let len1 = (v1.x * v1.x + v1.y * v1.y).sqrt();
-//         let len2 = (v2.x * v2.x + v2.y * v2.y).sqrt();
-
-//         // Scale the radius to match the shape's dimensions while keeping points normalized
-//         let radius = (scaled_radius).min(len1 / 2.0).min(len2 / 2.0);
-
-//         let offset1 = Vector::new(v1.x / len1 * radius, v1.y / len1 * radius);
-//         let offset2 = Vector::new(v2.x / len2 * radius, v2.y / len2 * radius);
-
-//         let p1_point = LyonPoint::new(p1.x, p1.y);
-
-//         let corner_start = point(p1_point.x - offset1.x, p1_point.y - offset1.y);
-//         let corner_end = point(p1_point.x + offset2.x, p1_point.y + offset2.y);
-
-//         if i == 0 {
-//             builder.begin(corner_start);
-//         }
-
-//         // Add control points for the curve
-//         // Scale these relative to the radius to maintain curve shape
-//         let control1 = point(p1_point.x, p1_point.y);
-//         let control2 = point(p1_point.x, p1_point.y);
-
-//         builder.cubic_bezier_to(control1, control2, corner_end);
-//     }
-
-//     builder.close();
-//     builder.build()
-// }
-
 use cgmath::SquareMatrix;
 use cgmath::Transform;
 
@@ -277,7 +232,13 @@ impl Polygon {
         fill: [f32; 4],
         name: String,
     ) -> Self {
+        let id = Uuid::new_v4();
         let transform = SnTransform::new(position);
+        let default_stroke = Stroke {
+            thickness: 2.0,
+            fill: rgb_to_wgpu(0, 0, 0, 1.0),
+        };
+
         let (vertices, indices, vertex_buffer, index_buffer) = get_polygon_data(
             window_size,
             device,
@@ -287,8 +248,8 @@ impl Polygon {
             &transform,
             border_radius,
             fill,
+            default_stroke,
         );
-        let id = Uuid::new_v4();
 
         Polygon {
             id,
@@ -298,6 +259,7 @@ impl Polygon {
             transform,
             border_radius,
             fill,
+            stroke: default_stroke,
             vertices,
             indices,
             vertex_buffer,
@@ -365,6 +327,7 @@ impl Polygon {
             &self.transform,
             self.border_radius,
             self.fill,
+            self.stroke,
         );
 
         self.vertices = vertices;
@@ -389,6 +352,7 @@ impl Polygon {
             &self.transform,
             self.border_radius,
             self.fill,
+            self.stroke,
         );
 
         self.points = points;
@@ -414,6 +378,7 @@ impl Polygon {
             &self.transform,
             self.border_radius,
             self.fill,
+            self.stroke,
         );
 
         self.dimensions = dimensions;
@@ -441,6 +406,7 @@ impl Polygon {
             &self.transform,
             self.border_radius,
             self.fill,
+            self.stroke,
         );
 
         self.vertices = vertices;
@@ -465,9 +431,36 @@ impl Polygon {
             &self.transform,
             border_radius,
             self.fill,
+            self.stroke,
         );
 
         self.border_radius = border_radius;
+        self.vertices = vertices;
+        self.indices = indices;
+        self.vertex_buffer = vertex_buffer;
+        self.index_buffer = index_buffer;
+    }
+
+    pub fn update_data_from_stroke(
+        &mut self,
+        window_size: &WindowSize,
+        device: &wgpu::Device,
+        stroke: Stroke,
+        camera: &Camera,
+    ) {
+        let (vertices, indices, vertex_buffer, index_buffer) = get_polygon_data(
+            window_size,
+            device,
+            camera,
+            self.points.clone(),
+            self.dimensions,
+            &self.transform,
+            self.border_radius,
+            self.fill,
+            stroke,
+        );
+
+        self.stroke = stroke;
         self.vertices = vertices;
         self.indices = indices;
         self.vertex_buffer = vertex_buffer;
@@ -490,6 +483,7 @@ impl Polygon {
             &self.transform,
             self.border_radius,
             fill,
+            self.stroke,
         );
 
         self.fill = fill;
@@ -581,65 +575,6 @@ impl Polygon {
             None
         }
     }
-
-    // pub fn closest_point_on_edge(&self, world_pos: Point, camera: &Camera) -> Option<EdgePoint> {
-    //     let mut closest_info = None;
-    //     let mut min_distance = f32::MAX;
-
-    //     // let normalized_mouse_pos = self.to_local_space(world_pos, camera);
-
-    //     for i in 0..self.points.len() {
-    //         let start = self.points[i];
-    //         let end = self.points[(i + 1) % self.points.len()];
-
-    //         let adjsuted_start = Point {
-    //             x: start.x * self.dimensions.0 + self.transform.position.x,
-    //             y: end.y * self.dimensions.1 + self.transform.position.y,
-    //         };
-
-    //         let adjsuted_end = Point {
-    //             x: end.x * self.dimensions.0 + self.transform.position.x,
-    //             y: end.y * self.dimensions.1 + self.transform.position.y,
-    //         };
-
-    //         let info =
-    //             closest_point_on_line_segment_with_info(adjsuted_start, adjsuted_end, world_pos);
-
-    //         if info.distance < min_distance {
-    //             min_distance = info.distance;
-    //             closest_info = Some((info, i));
-    //         }
-    //     }
-
-    //     if let Some((info, edge_index)) = closest_info {
-    //         // Convert the distance threshold to normalized space
-    //         let normalized_threshold = 20.0 / self.dimensions.0.min(self.dimensions.1);
-    //         let normalized_threshold = 100.0;
-
-    //         if info.distance < normalized_threshold {
-    //             println!(
-    //                 "new ring {:?} {:?} {:?}",
-    //                 info.point, min_distance, normalized_threshold
-    //             );
-
-    //             Some(EdgePoint {
-    //                 // point: Point {
-    //                 //     x: info.point.x * self.dimensions.0 + self.transform.position.x,
-    //                 //     y: info.point.y * self.dimensions.1 + self.transform.position.y,
-    //                 // },
-    //                 point: Point {
-    //                     x: info.point.x,
-    //                     y: info.point.y,
-    //                 },
-    //                 edge_index,
-    //             })
-    //         } else {
-    //             None
-    //         }
-    //     } else {
-    //         None
-    //     }
-    // }
 
     pub fn add_point(
         &mut self,
@@ -761,6 +696,7 @@ impl Polygon {
                 y: self.transform.position.y,
             },
             border_radius: self.border_radius,
+            stroke: self.stroke,
         }
     }
 }
@@ -794,12 +730,21 @@ pub struct Polygon {
     pub fill: [f32; 4],
     pub transform: SnTransform,
     pub border_radius: f32,
+    pub stroke: Stroke,
     pub vertices: Vec<Vertex>,
     pub indices: Vec<u32>,
     pub vertex_buffer: wgpu::Buffer,
     pub index_buffer: wgpu::Buffer,
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct Stroke {
+    pub thickness: f32,
+    pub fill: [f32; 4],
+}
+
+// I don't like repeating all these fields,
+// but using config as field of polygon requires cloning a lot!
 pub struct PolygonConfig {
     pub id: Uuid,
     pub name: String,
@@ -808,6 +753,7 @@ pub struct PolygonConfig {
     pub dimensions: (f32, f32), // (width, height) in pixels
     pub position: Point,
     pub border_radius: f32,
+    pub stroke: Stroke,
 }
 
 // Specific shape implementations

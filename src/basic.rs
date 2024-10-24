@@ -56,7 +56,7 @@ pub fn color_to_wgpu(c: f32) -> f32 {
     c / 255.0
 }
 
-pub fn wgpu_to_hex(c: f32) -> f32 {
+pub fn wgpu_to_human(c: f32) -> f32 {
     c * 255.0
 }
 

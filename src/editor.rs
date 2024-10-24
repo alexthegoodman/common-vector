@@ -12,7 +12,7 @@ use winit::window::CursorIcon;
 use crate::basic::{color_to_wgpu, string_to_f32, Shape};
 use crate::camera::{self, Camera, CameraBinding};
 use crate::guideline::point_to_ndc;
-use crate::polygon::PolygonConfig;
+use crate::polygon::{PolygonConfig, Stroke};
 use crate::{
     basic::Point,
     basic::WindowSize,
@@ -236,7 +236,63 @@ impl Editor {
                             ],
                             &camera,
                         ),
-
+                        "stroke_thickness" => selected_polygon.update_data_from_stroke(
+                            &window_size,
+                            &device,
+                            Stroke {
+                                thickness: string_to_f32(&s).expect("Couldn't convert string"),
+                                fill: selected_polygon.stroke.fill,
+                            },
+                            &camera,
+                        ),
+                        "stroke_red" => selected_polygon.update_data_from_stroke(
+                            &window_size,
+                            &device,
+                            Stroke {
+                                thickness: selected_polygon.stroke.thickness,
+                                fill: [
+                                    color_to_wgpu(
+                                        string_to_f32(&s).expect("Couldn't convert string"),
+                                    ),
+                                    selected_polygon.stroke.fill[1],
+                                    selected_polygon.stroke.fill[2],
+                                    selected_polygon.stroke.fill[3],
+                                ],
+                            },
+                            &camera,
+                        ),
+                        "stroke_green" => selected_polygon.update_data_from_stroke(
+                            &window_size,
+                            &device,
+                            Stroke {
+                                thickness: selected_polygon.stroke.thickness,
+                                fill: [
+                                    selected_polygon.stroke.fill[0],
+                                    color_to_wgpu(
+                                        string_to_f32(&s).expect("Couldn't convert string"),
+                                    ),
+                                    selected_polygon.stroke.fill[2],
+                                    selected_polygon.stroke.fill[3],
+                                ],
+                            },
+                            &camera,
+                        ),
+                        "stroke_blue" => selected_polygon.update_data_from_stroke(
+                            &window_size,
+                            &device,
+                            Stroke {
+                                thickness: selected_polygon.stroke.thickness,
+                                fill: [
+                                    selected_polygon.stroke.fill[0],
+                                    selected_polygon.stroke.fill[1],
+                                    color_to_wgpu(
+                                        string_to_f32(&s).expect("Couldn't convert string"),
+                                    ),
+                                    selected_polygon.stroke.fill[3],
+                                ],
+                            },
+                            &camera,
+                        ),
                         _ => println!("No match on input"),
                     },
                     InputValue::Number(n) => match key {
@@ -471,6 +527,7 @@ impl Editor {
                             position: polygon.transform.position,
                             border_radius: polygon.border_radius,
                             fill: polygon.fill,
+                            stroke: polygon.stroke,
                         },
                     );
                 }
@@ -535,6 +592,7 @@ impl Editor {
                             position: polygon.transform.position,
                             border_radius: polygon.border_radius,
                             fill: polygon.fill,
+                            stroke: polygon.stroke,
                         },
                     );
                 }
