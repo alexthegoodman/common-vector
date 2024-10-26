@@ -91,11 +91,6 @@ pub struct Editor {
 
     // viewport
     pub viewport: Arc<Mutex<Viewport>>,
-    pub drag_start: Option<Point>,
-    pub last_screen: Point, // last mouse position from input event top-left origin
-    pub last_world: Point,
-    pub last_top_left: Point,   // for inside the editor zone
-    pub global_top_left: Point, // for when recording mouse positions outside the editor zone
     pub handle_polygon_click: Option<Arc<PolygonClickHandler>>,
     pub gpu_resources: Option<Arc<GpuResources>>,
     pub handle_layers_update: Option<Arc<LayersUpdateHandler>>,
@@ -103,9 +98,17 @@ pub struct Editor {
     pub window: Option<Arc<Window>>,
     pub camera: Option<Camera>,
     pub is_panning: bool,
-    pub last_mouse_pos: Option<Point>,
+    pub is_brushing: bool,
     pub camera_binding: Option<CameraBinding>,
-    pub ds_ndc_pos: Point, // double-width sized ndc-style positioning (screen-oriented)
+
+    // points
+    pub last_mouse_pos: Option<Point>,
+    pub drag_start: Option<Point>,
+    pub last_screen: Point, // last mouse position from input event top-left origin
+    pub last_world: Point,
+    pub last_top_left: Point,   // for inside the editor zone
+    pub global_top_left: Point, // for when recording mouse positions outside the editor zone
+    pub ds_ndc_pos: Point,      // double-width sized ndc-style positioning (screen-oriented)
     pub ndc: Point,
 }
 
@@ -150,6 +153,7 @@ impl Editor {
             ndc: Point { x: 0.0, y: 0.0 },
             current_brush: BrushProperties::default(),
             active_stroke: None,
+            is_brushing: false,
         }
     }
 
@@ -630,11 +634,10 @@ impl Editor {
         window_size: &WindowSize,
         device: &wgpu::Device,
     ) {
-        if self.control_mode == ControlMode::Brush {
-            let mut stroke = BrushStroke::new(self.current_brush.clone());
-            stroke.add_point(point, &window_size, &device);
-            self.active_stroke = Some(stroke);
-        }
+        let mut stroke = BrushStroke::new(self.current_brush.clone());
+        stroke.add_point(self.last_top_left, &window_size, &device);
+        self.active_stroke = Some(stroke);
+        self.is_brushing = true;
     }
 
     pub fn handle_mouse_move_brush_mode(
@@ -643,8 +646,10 @@ impl Editor {
         window_size: &WindowSize,
         device: &wgpu::Device,
     ) {
-        if let Some(stroke) = &mut self.active_stroke {
-            stroke.add_point(point, &window_size, &device);
+        if (self.is_brushing) {
+            if let Some(stroke) = &mut self.active_stroke {
+                stroke.add_point(self.last_top_left, &window_size, &device);
+            }
         }
     }
 
@@ -987,6 +992,7 @@ impl Editor {
         self.drag_start = None;
         self.dragging_edge = None;
         self.is_panning = false;
+        self.is_brushing = false;
         self.guide_lines.clear();
         self.update_cursor();
     }

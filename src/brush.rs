@@ -85,7 +85,7 @@ impl BrushStroke {
             BrushStyle::Pattern { .. } => self.build_pattern_geometry(&mut path),
         }
 
-        path.end(true);
+        path.end(false);
         let path = path.build();
 
         // Create stroke options based on brush properties
