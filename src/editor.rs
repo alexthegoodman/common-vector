@@ -26,6 +26,12 @@ use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 
 #[derive(Eq, PartialEq, Clone, Copy, EnumIter, Debug)]
+pub enum ToolCategory {
+    Shape,
+    Brush,
+}
+
+#[derive(Eq, PartialEq, Clone, Copy, EnumIter, Debug)]
 pub enum ControlMode {
     Point,
     Edge,
@@ -73,7 +79,7 @@ pub struct GuideLine {
 }
 
 type PolygonClickHandler = dyn Fn() -> Option<Box<dyn FnMut(Uuid, PolygonConfig)>>;
-pub type LayersUpdateHandler = dyn Fn() -> Option<Box<dyn FnMut(Vec<PolygonConfig>)>>;
+pub type LayersUpdateHandler = dyn Fn() -> Option<Box<dyn FnMut(PolygonConfig)>>;
 
 pub struct Editor {
     // polygons
@@ -88,6 +94,8 @@ pub struct Editor {
     // brushes
     pub current_brush: BrushProperties,
     pub active_stroke: Option<BrushStroke>,
+
+    pub layer_list: Vec<Uuid>,
 
     // viewport
     pub viewport: Arc<Mutex<Viewport>>,
@@ -154,6 +162,7 @@ impl Editor {
             current_brush: BrushProperties::default(),
             active_stroke: None,
             is_brushing: false,
+            layer_list: Vec::new(),
         }
     }
 
@@ -487,7 +496,8 @@ impl Editor {
         0.0
     }
 
-    pub fn run_layers_update(&self) {
+    // adds most recent polygon to the ui layer list
+    pub fn run_layers_update(&mut self) {
         if (self.handle_layers_update.is_some()) {
             let handler_creator = self
                 .handle_layers_update
@@ -495,14 +505,20 @@ impl Editor {
                 .expect("Couldn't get handler");
             let mut handle_update = handler_creator().expect("Couldn't get handler");
 
-            let polygon_configs: Vec<PolygonConfig> = self
-                .polygons
-                .iter()
-                .map(|polygon| polygon.to_config())
-                .collect();
+            // let polygon_configs: Vec<PolygonConfig> = self
+            //     .polygons
+            //     .iter()
+            //     .map(|polygon| polygon.to_config())
+            //     .collect();
+
+            let polygon = &self.polygons[self.polygons.len() - 1];
+
+            let polygon_config = polygon.to_config();
 
             // println!("Update layers... {:?}", polygon_configs.len());
-            handle_update(polygon_configs);
+            handle_update(polygon_config);
+
+            self.layer_list.push(polygon.id);
         }
     }
 
