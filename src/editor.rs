@@ -4,12 +4,14 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use cgmath::{Matrix4, Point3, Vector2, Vector3, Vector4};
 use floem_renderer::gpu_resources::{self, GpuResources};
+use floem_winit::keyboard::ModifiersState;
 use floem_winit::window::Window;
 use std::f32::consts::PI;
 use uuid::Uuid;
 use winit::window::CursorIcon;
 
-use crate::basic::{color_to_wgpu, string_to_f32, Shape};
+use crate::basic::{color_to_wgpu, string_to_f32, BoundingBox, Shape};
+use crate::brush::{BrushProperties, BrushStroke};
 use crate::camera::{self, Camera, CameraBinding};
 use crate::guideline::point_to_ndc;
 use crate::polygon::{PolygonConfig, Stroke};
@@ -27,6 +29,7 @@ use strum_macros::EnumIter;
 pub enum ControlMode {
     Point,
     Edge,
+    Brush,
 }
 
 impl Display for ControlMode {
@@ -34,6 +37,7 @@ impl Display for ControlMode {
         match self {
             ControlMode::Point => f.write_str("Point"),
             ControlMode::Edge => f.write_str("Edge"),
+            ControlMode::Brush => f.write_str("Brush"),
         }
     }
 }
@@ -72,6 +76,7 @@ type PolygonClickHandler = dyn Fn() -> Option<Box<dyn FnMut(Uuid, PolygonConfig)
 pub type LayersUpdateHandler = dyn Fn() -> Option<Box<dyn FnMut(Vec<PolygonConfig>)>>;
 
 pub struct Editor {
+    // polygons
     pub polygons: Vec<Polygon>,
     pub hover_point: Option<EdgePoint>,
     pub hover_edge: Option<(usize, usize)>, // (polygon_index, edge_index)
@@ -79,15 +84,18 @@ pub struct Editor {
     pub dragging_edge: Option<(usize, usize)>, // (polygon_index, edge_index)
     pub dragging_polygon: Option<usize>,
     pub guide_lines: Vec<GuideLine>,
+
+    // brushes
+    pub current_brush: BrushProperties,
+    pub active_stroke: Option<BrushStroke>,
+
+    // viewport
     pub viewport: Arc<Mutex<Viewport>>,
     pub drag_start: Option<Point>,
-    // pub last_x: f32,
-    // pub last_y: f32,
     pub last_screen: Point, // last mouse position from input event top-left origin
     pub last_world: Point,
-    pub last_top_left: Point,
-    // pub button_handler: Option<Box<dyn Fn(&mut Editor)>>,
-    // button_handler: RefCell<Option<Box<dyn Fn(MutexGuard<'_, Editor>) + Send + 'static>>>,
+    pub last_top_left: Point,   // for inside the editor zone
+    pub global_top_left: Point, // for when recording mouse positions outside the editor zone
     pub handle_polygon_click: Option<Arc<PolygonClickHandler>>,
     pub gpu_resources: Option<Arc<GpuResources>>,
     pub handle_layers_update: Option<Arc<LayersUpdateHandler>>,
@@ -125,8 +133,6 @@ impl Editor {
             guide_lines: Vec::new(),
             viewport: viewport.clone(),
             drag_start: None,
-            // last_x: 0.0,
-            // last_y: 0.0,
             handle_polygon_click: None,
             gpu_resources: None,
             handle_layers_update: None,
@@ -140,7 +146,10 @@ impl Editor {
             last_world: Point { x: 0.0, y: 0.0 },
             ds_ndc_pos: Point { x: 0.0, y: 0.0 },
             last_top_left: Point { x: 0.0, y: 0.0 },
+            global_top_left: Point { x: 0.0, y: 0.0 },
             ndc: Point { x: 0.0, y: 0.0 },
+            current_brush: BrushProperties::default(),
+            active_stroke: None,
         }
     }
 
@@ -154,9 +163,26 @@ impl Editor {
     }
 
     pub fn handle_wheel(&mut self, delta: f32, mouse_pos: Point, queue: &wgpu::Queue) {
+        let camera = self.camera.as_mut().expect("Couldnt't get camera");
+
+        let interactive_bounds = BoundingBox {
+            min: Point { x: 550.0, y: 0.0 }, // account for aside width
+            max: Point {
+                x: camera.window_size.width as f32,
+                y: camera.window_size.height as f32,
+            },
+        };
+
+        if (mouse_pos.x < interactive_bounds.min.x
+            || mouse_pos.x > interactive_bounds.max.x
+            || mouse_pos.y < interactive_bounds.min.y
+            || mouse_pos.y > interactive_bounds.max.y)
+        {
+            return;
+        }
+
         // let zoom_factor = if delta > 0.0 { 1.1 } else { 0.9 };
         let zoom_factor = delta / 10.0;
-        let camera = self.camera.as_mut().expect("Couldnt't get camera");
         camera.zoom(zoom_factor, mouse_pos);
         self.update_camera_binding(queue);
     }
@@ -203,96 +229,6 @@ impl Editor {
             if let Some(selected_polygon) = self.polygons.get_mut(index) {
                 match new_value {
                     InputValue::Text(s) => match key {
-                        "red" => selected_polygon.update_data_from_fill(
-                            &window_size,
-                            &device,
-                            [
-                                color_to_wgpu(string_to_f32(&s).expect("Couldn't convert string")),
-                                selected_polygon.fill[1],
-                                selected_polygon.fill[2],
-                                selected_polygon.fill[3],
-                            ],
-                            &camera,
-                        ),
-                        "green" => selected_polygon.update_data_from_fill(
-                            &window_size,
-                            &device,
-                            [
-                                selected_polygon.fill[0],
-                                color_to_wgpu(string_to_f32(&s).expect("Couldn't convert string")),
-                                selected_polygon.fill[2],
-                                selected_polygon.fill[3],
-                            ],
-                            &camera,
-                        ),
-                        "blue" => selected_polygon.update_data_from_fill(
-                            &window_size,
-                            &device,
-                            [
-                                selected_polygon.fill[0],
-                                selected_polygon.fill[1],
-                                color_to_wgpu(string_to_f32(&s).expect("Couldn't convert string")),
-                                selected_polygon.fill[3],
-                            ],
-                            &camera,
-                        ),
-                        "stroke_thickness" => selected_polygon.update_data_from_stroke(
-                            &window_size,
-                            &device,
-                            Stroke {
-                                thickness: string_to_f32(&s).expect("Couldn't convert string"),
-                                fill: selected_polygon.stroke.fill,
-                            },
-                            &camera,
-                        ),
-                        "stroke_red" => selected_polygon.update_data_from_stroke(
-                            &window_size,
-                            &device,
-                            Stroke {
-                                thickness: selected_polygon.stroke.thickness,
-                                fill: [
-                                    color_to_wgpu(
-                                        string_to_f32(&s).expect("Couldn't convert string"),
-                                    ),
-                                    selected_polygon.stroke.fill[1],
-                                    selected_polygon.stroke.fill[2],
-                                    selected_polygon.stroke.fill[3],
-                                ],
-                            },
-                            &camera,
-                        ),
-                        "stroke_green" => selected_polygon.update_data_from_stroke(
-                            &window_size,
-                            &device,
-                            Stroke {
-                                thickness: selected_polygon.stroke.thickness,
-                                fill: [
-                                    selected_polygon.stroke.fill[0],
-                                    color_to_wgpu(
-                                        string_to_f32(&s).expect("Couldn't convert string"),
-                                    ),
-                                    selected_polygon.stroke.fill[2],
-                                    selected_polygon.stroke.fill[3],
-                                ],
-                            },
-                            &camera,
-                        ),
-                        "stroke_blue" => selected_polygon.update_data_from_stroke(
-                            &window_size,
-                            &device,
-                            Stroke {
-                                thickness: selected_polygon.stroke.thickness,
-                                fill: [
-                                    selected_polygon.stroke.fill[0],
-                                    selected_polygon.stroke.fill[1],
-                                    color_to_wgpu(
-                                        string_to_f32(&s).expect("Couldn't convert string"),
-                                    ),
-                                    selected_polygon.stroke.fill[3],
-                                ],
-                            },
-                            &camera,
-                        ),
                         _ => println!("No match on input"),
                     },
                     InputValue::Number(n) => match key {
@@ -314,6 +250,90 @@ impl Editor {
                             n,
                             &camera,
                         ),
+                        "red" => selected_polygon.update_data_from_fill(
+                            &window_size,
+                            &device,
+                            [
+                                color_to_wgpu(n),
+                                selected_polygon.fill[1],
+                                selected_polygon.fill[2],
+                                selected_polygon.fill[3],
+                            ],
+                            &camera,
+                        ),
+                        "green" => selected_polygon.update_data_from_fill(
+                            &window_size,
+                            &device,
+                            [
+                                selected_polygon.fill[0],
+                                color_to_wgpu(n),
+                                selected_polygon.fill[2],
+                                selected_polygon.fill[3],
+                            ],
+                            &camera,
+                        ),
+                        "blue" => selected_polygon.update_data_from_fill(
+                            &window_size,
+                            &device,
+                            [
+                                selected_polygon.fill[0],
+                                selected_polygon.fill[1],
+                                color_to_wgpu(n),
+                                selected_polygon.fill[3],
+                            ],
+                            &camera,
+                        ),
+                        "stroke_thickness" => selected_polygon.update_data_from_stroke(
+                            &window_size,
+                            &device,
+                            Stroke {
+                                thickness: n,
+                                fill: selected_polygon.stroke.fill,
+                            },
+                            &camera,
+                        ),
+                        "stroke_red" => selected_polygon.update_data_from_stroke(
+                            &window_size,
+                            &device,
+                            Stroke {
+                                thickness: selected_polygon.stroke.thickness,
+                                fill: [
+                                    color_to_wgpu(n),
+                                    selected_polygon.stroke.fill[1],
+                                    selected_polygon.stroke.fill[2],
+                                    selected_polygon.stroke.fill[3],
+                                ],
+                            },
+                            &camera,
+                        ),
+                        "stroke_green" => selected_polygon.update_data_from_stroke(
+                            &window_size,
+                            &device,
+                            Stroke {
+                                thickness: selected_polygon.stroke.thickness,
+                                fill: [
+                                    selected_polygon.stroke.fill[0],
+                                    color_to_wgpu(n),
+                                    selected_polygon.stroke.fill[2],
+                                    selected_polygon.stroke.fill[3],
+                                ],
+                            },
+                            &camera,
+                        ),
+                        "stroke_blue" => selected_polygon.update_data_from_stroke(
+                            &window_size,
+                            &device,
+                            Stroke {
+                                thickness: selected_polygon.stroke.thickness,
+                                fill: [
+                                    selected_polygon.stroke.fill[0],
+                                    selected_polygon.stroke.fill[1],
+                                    color_to_wgpu(n),
+                                    selected_polygon.stroke.fill[3],
+                                ],
+                            },
+                            &camera,
+                        ),
                         _ => println!("No match on input"),
                     },
                 }
@@ -321,6 +341,146 @@ impl Editor {
         } else {
             println!("No polygon found with the selected ID: {}", selected_id);
         }
+    }
+
+    pub fn get_polygon_width(&self, selected_id: Uuid) -> f32 {
+        let polygon_index = self.polygons.iter().position(|p| p.id == selected_id);
+
+        if let Some(index) = polygon_index {
+            if let Some(selected_polygon) = self.polygons.get(index) {
+                return selected_polygon.dimensions.0;
+            } else {
+                return 0.0;
+            }
+        }
+
+        0.0
+    }
+
+    pub fn get_polygon_height(&self, selected_id: Uuid) -> f32 {
+        let polygon_index = self.polygons.iter().position(|p| p.id == selected_id);
+
+        if let Some(index) = polygon_index {
+            if let Some(selected_polygon) = self.polygons.get(index) {
+                return selected_polygon.dimensions.1;
+            } else {
+                return 0.0;
+            }
+        }
+
+        0.0
+    }
+
+    pub fn get_polygon_red(&self, selected_id: Uuid) -> f32 {
+        let polygon_index = self.polygons.iter().position(|p| p.id == selected_id);
+
+        if let Some(index) = polygon_index {
+            if let Some(selected_polygon) = self.polygons.get(index) {
+                return selected_polygon.fill[0];
+            } else {
+                return 0.0;
+            }
+        }
+
+        0.0
+    }
+
+    pub fn get_polygon_green(&self, selected_id: Uuid) -> f32 {
+        let polygon_index = self.polygons.iter().position(|p| p.id == selected_id);
+
+        if let Some(index) = polygon_index {
+            if let Some(selected_polygon) = self.polygons.get(index) {
+                return selected_polygon.fill[1];
+            } else {
+                return 0.0;
+            }
+        }
+
+        0.0
+    }
+
+    pub fn get_polygon_blue(&self, selected_id: Uuid) -> f32 {
+        let polygon_index = self.polygons.iter().position(|p| p.id == selected_id);
+
+        if let Some(index) = polygon_index {
+            if let Some(selected_polygon) = self.polygons.get(index) {
+                return selected_polygon.fill[2];
+            } else {
+                return 0.0;
+            }
+        }
+
+        0.0
+    }
+
+    pub fn get_polygon_border_radius(&self, selected_id: Uuid) -> f32 {
+        let polygon_index = self.polygons.iter().position(|p| p.id == selected_id);
+
+        if let Some(index) = polygon_index {
+            if let Some(selected_polygon) = self.polygons.get(index) {
+                return selected_polygon.border_radius;
+            } else {
+                return 0.0;
+            }
+        }
+
+        0.0
+    }
+
+    pub fn get_polygon_stroke_thickness(&self, selected_id: Uuid) -> f32 {
+        let polygon_index = self.polygons.iter().position(|p| p.id == selected_id);
+
+        if let Some(index) = polygon_index {
+            if let Some(selected_polygon) = self.polygons.get(index) {
+                return selected_polygon.stroke.thickness;
+            } else {
+                return 0.0;
+            }
+        }
+
+        0.0
+    }
+
+    pub fn get_polygon_stroke_red(&self, selected_id: Uuid) -> f32 {
+        let polygon_index = self.polygons.iter().position(|p| p.id == selected_id);
+
+        if let Some(index) = polygon_index {
+            if let Some(selected_polygon) = self.polygons.get(index) {
+                return selected_polygon.stroke.fill[0];
+            } else {
+                return 0.0;
+            }
+        }
+
+        0.0
+    }
+
+    pub fn get_polygon_stroke_green(&self, selected_id: Uuid) -> f32 {
+        let polygon_index = self.polygons.iter().position(|p| p.id == selected_id);
+
+        if let Some(index) = polygon_index {
+            if let Some(selected_polygon) = self.polygons.get(index) {
+                return selected_polygon.stroke.fill[1];
+            } else {
+                return 0.0;
+            }
+        }
+
+        0.0
+    }
+
+    pub fn get_polygon_stroke_blue(&self, selected_id: Uuid) -> f32 {
+        let polygon_index = self.polygons.iter().position(|p| p.id == selected_id);
+
+        if let Some(index) = polygon_index {
+            if let Some(selected_polygon) = self.polygons.get(index) {
+                return selected_polygon.stroke.fill[2];
+            } else {
+                return 0.0;
+            }
+        }
+
+        0.0
     }
 
     pub fn run_layers_update(&self) {
@@ -346,6 +506,10 @@ impl Editor {
         let cursor = match self.control_mode {
             ControlMode::Point => {
                 // I feel that the ring / dot is better, and Grab covers it up
+                CursorIcon::Default
+            }
+            ControlMode::Brush => {
+                // hmm
                 CursorIcon::Default
             }
             ControlMode::Edge => {
@@ -454,9 +618,34 @@ impl Editor {
         match self.control_mode {
             ControlMode::Point => self.handle_mouse_down_point_mode(mouse_pos, window_size, device),
             ControlMode::Edge => self.handle_mouse_down_edge_mode(mouse_pos, window_size, device),
+            ControlMode::Brush => self.handle_mouse_down_brush_mode(mouse_pos, window_size, device),
         }
 
         self.update_cursor();
+    }
+
+    pub fn handle_mouse_down_brush_mode(
+        &mut self,
+        point: Point,
+        window_size: &WindowSize,
+        device: &wgpu::Device,
+    ) {
+        if self.control_mode == ControlMode::Brush {
+            let mut stroke = BrushStroke::new(self.current_brush.clone());
+            stroke.add_point(point, &window_size, &device);
+            self.active_stroke = Some(stroke);
+        }
+    }
+
+    pub fn handle_mouse_move_brush_mode(
+        &mut self,
+        point: Point,
+        window_size: &WindowSize,
+        device: &wgpu::Device,
+    ) {
+        if let Some(stroke) = &mut self.active_stroke {
+            stroke.add_point(point, &window_size, &device);
+        }
     }
 
     pub fn handle_mouse_down_point_mode(
@@ -617,10 +806,26 @@ impl Editor {
             x: ds_ndc_pos.x,
             y: ds_ndc_pos.y,
         };
-        // let top_left = camera.ds_ndc_to_top_left(ds_ndc_pos);
-        // let top_left = camera.ndc_to_top_left(ds_ndc.ndc);
         let top_left = ds_ndc.top_left;
-        // println!("top_left {:?} {:?}", top_left, mouse_pos);
+
+        self.global_top_left = top_left;
+
+        let interactive_bounds = BoundingBox {
+            min: Point { x: 550.0, y: 0.0 }, // account for aside width
+            max: Point {
+                x: window_size.width as f32,
+                y: window_size.height as f32,
+            },
+        };
+
+        if (x < interactive_bounds.min.x
+            || x > interactive_bounds.max.x
+            || y < interactive_bounds.min.y
+            || y > interactive_bounds.max.y)
+        {
+            return;
+        }
+
         self.last_top_left = top_left;
         self.ds_ndc_pos = ds_ndc_pos;
         self.ndc = ds_ndc.ndc;
@@ -663,6 +868,9 @@ impl Editor {
                 self.handle_mouse_move_point_mode(ds_ndc_pos, window_size, device)
             }
             ControlMode::Edge => self.handle_mouse_move_edge_mode(ds_ndc_pos, window_size, device),
+            ControlMode::Brush => {
+                self.handle_mouse_move_brush_mode(ds_ndc_pos, window_size, device)
+            }
         }
 
         self.update_cursor();

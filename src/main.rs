@@ -19,6 +19,8 @@ use crate::editor::{Editor, Viewport};
 use wgpu::util::DeviceExt;
 
 pub mod basic;
+pub mod brush;
+pub mod camera;
 pub mod dot;
 pub mod editor;
 pub mod guideline;
@@ -26,7 +28,6 @@ pub mod path;
 pub mod polygon;
 pub mod transform;
 pub mod vertex;
-pub mod camera;
 
 // Styling information
 // struct Style {
