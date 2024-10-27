@@ -78,11 +78,38 @@ pub struct GuideLine {
     pub end: Point,
 }
 
+// Define all possible edit operations
+#[derive(Debug)]
+pub enum PolygonProperty {
+    Width(f32),
+    Height(f32),
+    // Position(f32, f32),
+    Red(f32),
+    Green(f32),
+    Blue(f32),
+    BorderRadius(f32),
+    StrokeThickness(f32),
+    StrokeRed(f32),
+    StrokeGreen(f32),
+    StrokeBlue(f32),
+    Points(Vec<Point>),
+}
+
+#[derive(Debug)]
+pub struct PolygonEditConfig {
+    pub polygon_id: Uuid,
+    pub field_name: String,
+    pub old_value: PolygonProperty,
+    pub new_value: PolygonProperty,
+    // pub signal: RwSignal<String>,
+}
+
 type PolygonClickHandler = dyn Fn() -> Option<Box<dyn FnMut(Uuid, PolygonConfig)>>;
 pub type LayersUpdateHandler = dyn Fn() -> Option<Box<dyn FnMut(PolygonConfig)>>;
 
 pub struct Editor {
     // polygons
+    pub selected_polygon_id: Uuid,
     pub polygons: Vec<Polygon>,
     pub hover_point: Option<EdgePoint>,
     pub hover_edge: Option<(usize, usize)>, // (polygon_index, edge_index)
@@ -125,6 +152,7 @@ use std::borrow::BorrowMut;
 pub enum InputValue {
     Text(String),
     Number(f32),
+    Points(Vec<Point>),
 }
 
 impl Editor {
@@ -163,6 +191,7 @@ impl Editor {
             active_stroke: None,
             is_brushing: false,
             layer_list: Vec::new(),
+            selected_polygon_id: Uuid::nil(),
         }
     }
 
@@ -222,9 +251,11 @@ impl Editor {
         if let Some(index) = polygon_index {
             println!("Found selected polygon with ID: {}", selected_id);
 
+            let camera = self.camera.expect("Couldn't get camera");
+
             // Get the necessary data from editor
-            let viewport_width = self.viewport.lock().unwrap().width;
-            let viewport_height = self.viewport.lock().unwrap().height;
+            let viewport_width = camera.window_size.width;
+            let viewport_height = camera.window_size.height;
             let device = &self
                 .gpu_resources
                 .as_ref()
@@ -236,12 +267,19 @@ impl Editor {
                 height: viewport_height as u32,
             };
 
-            let camera = self.camera.expect("Couldn't get camera");
-
             // Second iteration: update the selected polygon
             if let Some(selected_polygon) = self.polygons.get_mut(index) {
                 match new_value {
                     InputValue::Text(s) => match key {
+                        _ => println!("No match on input"),
+                    },
+                    InputValue::Points(s) => match key {
+                        "points" => selected_polygon.update_data_from_points(
+                            &window_size,
+                            device,
+                            s,
+                            &camera,
+                        ),
                         _ => println!("No match on input"),
                     },
                     InputValue::Number(n) => match key {
@@ -628,20 +666,24 @@ impl Editor {
         }
     }
 
-    pub fn handle_mouse_down(&mut self, window_size: &WindowSize, device: &wgpu::Device) {
+    pub fn handle_mouse_down(
+        &mut self,
+        window_size: &WindowSize,
+        device: &wgpu::Device,
+    ) -> Option<PolygonEditConfig> {
         let camera = self.camera.as_ref().expect("Couldn't get camera");
         let x = self.ds_ndc_pos.x;
         let y = self.ds_ndc_pos.y;
         let mouse_pos = Point { x, y };
         // let world_pos = camera.screen_to_world(mouse_pos);
 
+        self.update_cursor();
+
         match self.control_mode {
             ControlMode::Point => self.handle_mouse_down_point_mode(mouse_pos, window_size, device),
             ControlMode::Edge => self.handle_mouse_down_edge_mode(mouse_pos, window_size, device),
             ControlMode::Brush => self.handle_mouse_down_brush_mode(mouse_pos, window_size, device),
         }
-
-        self.update_cursor();
     }
 
     pub fn handle_mouse_down_brush_mode(
@@ -649,11 +691,13 @@ impl Editor {
         point: Point,
         window_size: &WindowSize,
         device: &wgpu::Device,
-    ) {
+    ) -> Option<PolygonEditConfig> {
         let mut stroke = BrushStroke::new(self.current_brush.clone());
         stroke.add_point(self.last_top_left, &window_size, &device);
         self.active_stroke = Some(stroke);
         self.is_brushing = true;
+
+        return None;
     }
 
     pub fn handle_mouse_move_brush_mode(
@@ -676,7 +720,7 @@ impl Editor {
         mouse_pos: Point,
         window_size: &WindowSize,
         device: &wgpu::Device,
-    ) {
+    ) -> Option<PolygonEditConfig> {
         let camera = self.camera.as_mut().expect("Couldn't get camera");
 
         if let Some(hover_point) = self.hover_point {
@@ -692,7 +736,9 @@ impl Editor {
                             y: (edge_point.point.y - polygon.transform.position.y)
                                 / polygon.dimensions.1,
                         };
-                        println!("normalized_point {:?}", normalized_point);
+
+                        let existing_points = polygon.points.clone();
+
                         polygon.add_point(
                             normalized_point,
                             edge_point.edge_index,
@@ -700,22 +746,49 @@ impl Editor {
                             device,
                             &camera,
                         );
-                        // already done in add_point
-                        // polygon.update_data_from_points(
-                        //     window_size,
-                        //     device,
-                        //     polygon.points.clone(),
-                        //     &camera,
-                        // );
+
+                        let new_points = polygon.points.clone();
+
                         self.dragging_point = Some((poly_index, edge_point.edge_index + 1));
-                        return;
+
+                        // open properties panel adn set as selected when adding points as well
+                        if (self.handle_polygon_click.is_some()) {
+                            let handler_creator = self
+                                .handle_polygon_click
+                                .as_ref()
+                                .expect("Couldn't get handler");
+                            let mut handle_click = handler_creator().expect("Couldn't get handler");
+                            handle_click(
+                                polygon.id,
+                                PolygonConfig {
+                                    id: polygon.id,
+                                    name: polygon.name.clone(),
+                                    points: polygon.points.clone(),
+                                    dimensions: polygon.dimensions,
+                                    position: polygon.transform.position,
+                                    border_radius: polygon.border_radius,
+                                    fill: polygon.fill,
+                                    stroke: polygon.stroke,
+                                },
+                            );
+                            self.selected_polygon_id = polygon.id;
+                            polygon.old_points = Some(polygon.points.clone());
+                        }
+
+                        // does this bubble through the for loop?
+                        return Some(PolygonEditConfig {
+                            polygon_id: polygon.id,
+                            old_value: PolygonProperty::Points(existing_points),
+                            new_value: PolygonProperty::Points(new_points),
+                            field_name: "points".to_string(),
+                        });
                     }
                 }
             }
         }
 
         // Check if we're clicking on a polygon to drag
-        for (poly_index, polygon) in self.polygons.iter().enumerate() {
+        for (poly_index, polygon) in self.polygons.iter_mut().enumerate() {
             if polygon.contains_point(&self.last_top_left, &camera) {
                 self.dragging_polygon = Some(poly_index);
                 self.drag_start = Some(self.last_top_left);
@@ -740,8 +813,11 @@ impl Editor {
                             stroke: polygon.stroke,
                         },
                     );
+                    self.selected_polygon_id = polygon.id;
+                    polygon.old_points = Some(polygon.points.clone());
                 }
-                return;
+
+                return None; // nothing to add to undo stack
             }
         }
 
@@ -754,7 +830,7 @@ impl Editor {
                 };
                 if distance(world_point, self.last_top_left) < 5.0 {
                     self.dragging_point = Some((poly_index, point_index));
-                    return;
+                    return None;
                 }
             }
         }
@@ -763,6 +839,8 @@ impl Editor {
         self.is_panning = true;
         camera.focus_point = Vector2::new(mouse_pos.x, mouse_pos.y);
         self.last_mouse_pos = Some(mouse_pos);
+
+        return None;
     }
 
     fn handle_mouse_down_edge_mode(
@@ -770,17 +848,17 @@ impl Editor {
         mouse_pos: Point,
         window_size: &WindowSize,
         device: &wgpu::Device,
-    ) {
+    ) -> Option<PolygonEditConfig> {
         let camera = self.camera.as_ref().expect("Couldn't get camera");
         // let world_pos = self.camera.screen_to_world(mouse_pos);
 
         if let Some((poly_index, edge_index)) = self.hover_edge {
             self.dragging_edge = Some((poly_index, edge_index));
-            return;
+            return None;
         }
 
         // If not hovering over an edge, check for polygon dragging (same as point mode)
-        for (poly_index, polygon) in self.polygons.iter().enumerate() {
+        for (poly_index, polygon) in self.polygons.iter_mut().enumerate() {
             if polygon.contains_point(&self.last_top_left, camera) {
                 self.dragging_polygon = Some(poly_index);
                 self.drag_start = Some(self.last_top_left);
@@ -805,11 +883,15 @@ impl Editor {
                             stroke: polygon.stroke,
                         },
                     );
+                    self.selected_polygon_id = polygon.id;
+                    polygon.old_points = Some(polygon.points.clone());
                 }
 
-                return;
+                return None;
             }
         }
+
+        None
     }
 
     pub fn handle_mouse_move(
@@ -1002,7 +1084,37 @@ impl Editor {
         }
     }
 
-    pub fn handle_mouse_up(&mut self) {
+    pub fn handle_mouse_up(&mut self) -> Option<PolygonEditConfig> {
+        let mut action_edit = None;
+
+        let polygon_index = self
+            .polygons
+            .iter()
+            .position(|p| p.id == self.selected_polygon_id);
+
+        if let Some(index) = polygon_index {
+            if let Some(selected_polygon) = self.polygons.get(index) {
+                if (selected_polygon.old_points.is_some()) {
+                    if (self.dragging_point.is_some() || self.dragging_edge.is_some()) {
+                        let old_points = selected_polygon
+                            .old_points
+                            .as_ref()
+                            .expect("Couldn't fetch old points");
+                        action_edit = Some(PolygonEditConfig {
+                            polygon_id: selected_polygon.id,
+                            old_value: PolygonProperty::Points(old_points.to_vec()),
+                            new_value: PolygonProperty::Points(selected_polygon.points.clone()),
+                            field_name: "points".to_string(),
+                        });
+                    } else if (self.dragging_polygon.is_some()) {
+                        // return PolygonProperty::Position
+                    } else if (self.is_brushing) {
+                        // return BrushProperty?
+                    }
+                }
+            }
+        }
+
         self.dragging_point = None;
         self.dragging_polygon = None;
         self.drag_start = None;
@@ -1011,6 +1123,8 @@ impl Editor {
         self.is_brushing = false;
         self.guide_lines.clear();
         self.update_cursor();
+
+        action_edit
     }
 
     fn update_guide_lines(&mut self, dragged_poly_index: usize, window_size: &WindowSize) {

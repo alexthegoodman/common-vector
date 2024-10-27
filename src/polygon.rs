@@ -255,6 +255,7 @@ impl Polygon {
             id,
             name,
             points,
+            old_points: None,
             dimensions,
             transform,
             border_radius,
@@ -726,6 +727,7 @@ pub struct Polygon {
     pub id: Uuid,
     pub name: String,
     pub points: Vec<Point>,
+    pub old_points: Option<Vec<Point>>,
     pub dimensions: (f32, f32), // (width, height) in pixels
     pub fill: [f32; 4],
     pub transform: SnTransform,
