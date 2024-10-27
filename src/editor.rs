@@ -120,7 +120,9 @@ pub struct Editor {
 
     // brushes
     pub current_brush: BrushProperties,
-    pub active_stroke: Option<BrushStroke>,
+    // pub active_stroke: Option<BrushStroke>,
+    pub active_stroke_id: Option<Uuid>,
+    pub brush_strokes: Vec<BrushStroke>,
 
     pub layer_list: Vec<Uuid>,
 
@@ -147,7 +149,7 @@ pub struct Editor {
     pub ndc: Point,
 }
 
-use std::borrow::BorrowMut;
+use std::borrow::{Borrow, BorrowMut};
 
 pub enum InputValue {
     Text(String),
@@ -188,10 +190,12 @@ impl Editor {
             global_top_left: Point { x: 0.0, y: 0.0 },
             ndc: Point { x: 0.0, y: 0.0 },
             current_brush: BrushProperties::default(),
-            active_stroke: None,
+            // active_stroke: None,
+            active_stroke_id: None,
             is_brushing: false,
             layer_list: Vec::new(),
             selected_polygon_id: Uuid::nil(),
+            brush_strokes: Vec::new(),
         }
     }
 
@@ -694,7 +698,10 @@ impl Editor {
     ) -> Option<PolygonEditConfig> {
         let mut stroke = BrushStroke::new(self.current_brush.clone());
         stroke.add_point(self.last_top_left, &window_size, &device);
-        self.active_stroke = Some(stroke);
+        // self.active_stroke = Some(stroke);
+        let stroke_id = stroke.id;
+        self.brush_strokes.push(stroke);
+        self.active_stroke_id = Some(stroke_id);
         self.is_brushing = true;
 
         return None;
@@ -707,8 +714,18 @@ impl Editor {
         device: &wgpu::Device,
     ) {
         if (self.is_brushing) {
-            if let Some(stroke) = &mut self.active_stroke {
-                stroke.add_point(self.last_top_left, &window_size, &device);
+            if let Some(stroke_id) = self.active_stroke_id {
+                let stroke_index = self
+                    .brush_strokes
+                    .iter()
+                    .position(|s| s.id == stroke_id)
+                    .expect("Couldn't get brush position");
+
+                self.brush_strokes[stroke_index].add_point(
+                    self.last_top_left,
+                    &window_size,
+                    &device,
+                );
             }
         }
     }
@@ -775,13 +792,7 @@ impl Editor {
                             polygon.old_points = Some(polygon.points.clone());
                         }
 
-                        // does this bubble through the for loop?
-                        return Some(PolygonEditConfig {
-                            polygon_id: polygon.id,
-                            old_value: PolygonProperty::Points(existing_points),
-                            new_value: PolygonProperty::Points(new_points),
-                            field_name: "points".to_string(),
-                        });
+                        return None;
                     }
                 }
             }
@@ -1109,6 +1120,13 @@ impl Editor {
                     } else if (self.dragging_polygon.is_some()) {
                         // return PolygonProperty::Position
                     } else if (self.is_brushing) {
+                        // set self.brush_strokes and reset active_brush?
+                        // self.brush_strokes.push(
+                        //     self.active_stroke
+                        //         .as_ref()
+                        //         .expect("Couldn't get active stroke")
+                        //         .clone(),
+                        // );
                         // return BrushProperty?
                     }
                 }
